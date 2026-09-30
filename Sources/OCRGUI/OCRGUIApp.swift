@@ -4,16 +4,19 @@ import OCRGUICore
 @main
 struct OCRGUIApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @State private var appModel = AppModel()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(appModel)
                 .frame(minWidth: 1000, minHeight: 640)
         }
         .windowToolbarStyle(.unified)
 
         Settings {
             SettingsPane()
+                .environment(appModel)
         }
     }
 }
