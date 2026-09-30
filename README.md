@@ -110,6 +110,14 @@ PaddleOCR-VL（MLX）约 40 秒；Paddle 经典预加载约 10-30 秒；Xiaomi �
 **Q: 如何彻底清理？**
 删除 `~/Library/Application Support/OCRGUI/`（配置+历史）、项目下 `runtime/`、`models/`。
 
+**Q: setup 脚本下载太慢？**
+国内网络建议先设置镜像再运行：
+```zsh
+export PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"   # pip 清华镜像
+export HF_ENDPOINT="https://hf-mirror.com"                        # HuggingFace 镜像（模型下载）
+zsh scripts/setup_xiaomi.sh
+```
+
 ## 开发
 
 ```zsh

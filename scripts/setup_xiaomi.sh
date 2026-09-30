@@ -16,9 +16,9 @@ if [[ ! -x "$ENV_DIR/bin/pip" ]]; then
   "$PY" -m venv "$ENV_DIR"
 fi
 
-log "安装依赖（torch + transformers 5.17 + fastapi，torch 下载约 2-3GB）…"
+log "安装依赖（torch + torchvision + transformers 5.17 + fastapi，torch 下载约 2-3GB）…"
 "$ENV_DIR/bin/pip" install --quiet --upgrade pip
-"$ENV_DIR/bin/pip" install torch "transformers==5.17.0" pillow fastapi uvicorn numpy
+"$ENV_DIR/bin/pip" install torch torchvision "transformers==5.17.0" pillow fastapi uvicorn numpy
 
 if [[ ! -f "$MODEL_DIR/model.safetensors" ]]; then
   log "下载模型 SeerRay-Lab/Xiaomi-OCR-0（1.7GB）…"
