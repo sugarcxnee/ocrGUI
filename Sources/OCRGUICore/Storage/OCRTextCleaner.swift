@@ -101,14 +101,23 @@ public enum OCRTextCleaner {
         return mutable
     }
 
-    /// 剥离模型输出的 LaTeX 表格壳：删除壳标记行；整行仅为 multicolumn 单元格时
-    /// 把单元格文本释放为正文行；行内混有实质内容时只剥壳保留文本。
+    /// 剥离模型输出的 LaTeX "表格壳"（把标题/整页塞进 multicolumn 单元格的怪癖输出）。
+    /// 只处理"包装壳形状"的块：整行仅为 multicolumn 单元格才释放其文本，
+    /// 壳标记行仅在紧邻这种包装行时删除——文档中**真实的 LaTeX 表格**
+    /// （含 `a & b \\` 普通数据行）因此原样保留，对任何引擎的忠实转写都安全。
     private static func stripTableShell(_ text: String) -> String {
-        var out: [String] = []
-        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            let line = String(rawLine)
+        enum LineKind {
+            case marker
+            case wrapper(cells: [String])
+            case content(String)
+        }
+
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        var kinds: [LineKind] = []
+        for line in lines {
             let s = line.trimmingCharacters(in: .whitespaces)
             if tableShellLine.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil {
+                kinds.append(.marker)
                 continue
             }
             if s.contains("\\multicolumn") {
@@ -116,25 +125,45 @@ public enum OCRTextCleaner {
                 let residual = replaceAll(tableNoise, in: replaceAll(multicolumn, in: s) { _ in "" }) { _ in "" }
                     .replacingOccurrences(of: "l", with: "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                if residual.count < 5 {
-                    var released = false
-                    for cell in cells {
-                        for piece in cell.components(separatedBy: " \\\\ ") {
-                            let cleaned = piece.trimmingCharacters(in: .whitespaces)
-                                .trimmingCharacters(in: CharacterSet(charactersIn: "\\"))
-                                .trimmingCharacters(in: .whitespaces)
-                            if !cleaned.isEmpty {
-                                out.append(cleaned)
-                                released = true
-                            }
+                if cells.contains(where: { !$0.isEmpty }), residual.count < 5 {
+                    kinds.append(.wrapper(cells: cells))
+                    continue
+                }
+            }
+            kinds.append(.content(line))
+        }
+
+        var out: [String] = []
+        var lastEmittedWrapper = false
+        for (index, kind) in kinds.enumerated() {
+            switch kind {
+            case .wrapper(let cells):
+                for cell in cells {
+                    for piece in cell.components(separatedBy: " \\\\ ") {
+                        let cleaned = piece.trimmingCharacters(in: .whitespaces)
+                            .trimmingCharacters(in: CharacterSet(charactersIn: "\\"))
+                            .trimmingCharacters(in: .whitespaces)
+                        if !cleaned.isEmpty {
+                            out.append(cleaned)
                         }
                     }
-                    if released { continue }
                 }
-                out.append(replaceAll(multicolumn, in: line) { $0 })
-                continue
+                lastEmittedWrapper = true
+            case .marker:
+                // 闭合标记：前面刚释放过包装行；开场标记：跳过标记后紧接着是包装行
+                let nextNonMarkerIsWrapper = kinds[(index + 1)...].prefix(3).contains { subKind in
+                    if case .wrapper = subKind { return true }
+                    return false
+                }
+                if lastEmittedWrapper || nextNonMarkerIsWrapper {
+                    continue  // 属于包装壳，删除
+                }
+                out.append(lines[index])
+                lastEmittedWrapper = false
+            case .content(let line):
+                out.append(line)
+                lastEmittedWrapper = false
             }
-            out.append(line)
         }
         return out.joined(separator: "\n")
     }

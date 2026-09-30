@@ -98,6 +98,30 @@ struct MarkdownBinderTests {
         #expect(cleaned.contains("设 $G$ 是一个群，正文继续。"))
     }
 
+    @Test("文档中真实的 LaTeX 表格必须原样保留（跨模型安全）")
+    func genuineTableSurvives() {
+        let raw = """
+        下表给出群的分类：
+
+        \\begin{table}
+        \\begin{tabular}{l l}
+        群 & 阶 \\\\
+        \\(Z_4\\) & 4 \\\\
+        \\(V_4\\) & 4 \\\\
+        \\end{tabular}
+        \\end{table}
+
+        结论如上。
+        """
+        let cleaned = OCRTextCleaner.clean(raw)
+        // 真表格的结构性标记与数据行全部保留
+        #expect(cleaned.contains("\\begin{table}"))
+        #expect(cleaned.contains("\\begin{tabular}{l l}"))
+        #expect(cleaned.contains("群 & 阶"))
+        #expect(cleaned.contains("V_4"))
+        #expect(cleaned.contains("结论如上"))
+    }
+
     @Test("多页记录装订为单一文档：页注释 + 兜底标注 + 汇总头")
     func bindsRecord() throws {
         var fallbackPage = OcrPage(pageNumber: 2, width: 1, height: 1, lines: [],
