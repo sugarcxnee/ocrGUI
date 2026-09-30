@@ -42,6 +42,7 @@ public enum OCRTextCleaner {
     public static func clean(_ text: String) -> String {
         var result = text
         result = replaceAll(wrapperTag, in: result) { _ in "" }
+        result = stripTableShell(result)
         result = replaceAll(inlineMath, in: result) { "$" + $0.trimmedForMath + "$" }
         result = replaceAll(displayMath, in: result) { "$$\n" + $0.trimmedForMath + "\n$$" }
 
@@ -61,6 +62,14 @@ public enum OCRTextCleaner {
     private static let wrapperTag = regex("^</?(md|doc|parsing|markdown)>$", anchors: true)
     private static let inlineMath = regex(#"\\\((.+?)\\\)"#, dotAll: true)
     private static let displayMath = regex(#"\\\[(.+?)\\\]"#, dotAll: true)
+    /// multicolumn 单元格（模型爱把标题/整页内容塞进 LaTeX 表格壳）
+    private static let multicolumn = regex(#"\\multicolumn\{2\}\{l\}\{(.*?)\}\s*(?:\\\\)?"#, dotAll: true)
+    /// 表格壳格式噪音（判断"除单元格外无实质内容"用）
+    private static let tableNoise = regex(
+        #"\\(begin|end)\{tabular\}(\{[l |]*\})?|\\hline|\\quad|\\sffamily|\\textbf|&|\\\\|[{}\s]"#)
+    /// 独立的表格壳标记行（含不闭合的壳）
+    private static let tableShellLine = regex(
+        #"^\\(begin\{table\}|end\{table\}|end\{tabular\}|begin\{tabular\}(\{[l |]*\}))?$"#, anchors: true)
     private static let pageNumberLine = regex(#"^\s*\d{1,3}\s*?$"#, anchors: true)
     /// 页首书眉：可选行首页码 + §节号 + 短标题 + **行尾页码**（必须有尾页码，
     /// 否则会误杀恰好在页首的真实节标题，如 "§1.1 循环群"）
@@ -90,6 +99,50 @@ public enum OCRTextCleaner {
             mutable.replaceSubrange(range, with: template(inner))
         }
         return mutable
+    }
+
+    /// 剥离模型输出的 LaTeX 表格壳：删除壳标记行；整行仅为 multicolumn 单元格时
+    /// 把单元格文本释放为正文行；行内混有实质内容时只剥壳保留文本。
+    private static func stripTableShell(_ text: String) -> String {
+        var out: [String] = []
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(rawLine)
+            let s = line.trimmingCharacters(in: .whitespaces)
+            if tableShellLine.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil {
+                continue
+            }
+            if s.contains("\\multicolumn") {
+                let cells = captures(multicolumn, in: s)
+                let residual = replaceAll(tableNoise, in: replaceAll(multicolumn, in: s) { _ in "" }) { _ in "" }
+                    .replacingOccurrences(of: "l", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if residual.count < 5 {
+                    var released = false
+                    for cell in cells {
+                        for piece in cell.components(separatedBy: " \\\\ ") {
+                            let cleaned = piece.trimmingCharacters(in: .whitespaces)
+                                .trimmingCharacters(in: CharacterSet(charactersIn: "\\"))
+                                .trimmingCharacters(in: .whitespaces)
+                            if !cleaned.isEmpty {
+                                out.append(cleaned)
+                                released = true
+                            }
+                        }
+                    }
+                    if released { continue }
+                }
+                out.append(replaceAll(multicolumn, in: line) { $0 })
+                continue
+            }
+            out.append(line)
+        }
+        return out.joined(separator: "\n")
+    }
+
+    private static func captures(_ regex: NSRegularExpression, in input: String) -> [String] {
+        regex.matches(in: input, range: NSRange(input.startIndex..., in: input)).compactMap {
+            Range($0.range(at: 1), in: input).map { String(input[$0]) }
+        }
     }
 
     private static func isPageNumberLine(_ line: String) -> Bool {

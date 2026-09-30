@@ -87,6 +87,17 @@ struct MarkdownBinderTests {
         #expect(lines.contains("普通句子第一章 群不算标题"))
     }
 
+    @Test("LaTeX 表格壳剥离：不闭合壳的标题行释放为正文")
+    func stripsTableShell() {
+        let raw = "\\begin{table}\n\\begin{tabular}{l} \\multicolumn{2}{l}{第一章 群} \\\\ \\multicolumn{2}{l}{§ 1.1 循环群} \\\\ \\end{tabular}\n设 \\(G\\) 是一个群，正文继续。"
+        let cleaned = OCRTextCleaner.clean(raw)
+        #expect(!cleaned.contains("multicolumn"))
+        #expect(!cleaned.contains("begin{table}"))
+        #expect(cleaned.contains("# 第一章 群"))
+        #expect(cleaned.contains("## § 1.1 循环群"))
+        #expect(cleaned.contains("设 $G$ 是一个群，正文继续。"))
+    }
+
     @Test("多页记录装订为单一文档：页注释 + 兜底标注 + 汇总头")
     func bindsRecord() throws {
         var fallbackPage = OcrPage(pageNumber: 2, width: 1, height: 1, lines: [],
