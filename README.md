@@ -70,6 +70,7 @@ scripts/setup_all.sh
 ```zsh
 scripts/recipes/xiaomi-ocr-0.sh    # Xiaomi-OCR-0（0.8B VLM，2026-09）
 scripts/recipes/paddle-vl.sh       # PaddleOCR-VL 1.6（MLX 4bit）
+scripts/recipes/glm-ocr.sh         # GLM-OCR（智谱 0.9B，MLX 4bit）
 ```
 
 ### 方式三：设置界面手动配置 / 外接已有服务
