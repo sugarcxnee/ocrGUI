@@ -1,0 +1,14 @@
+.DS_Store
+/.build/
+/.swiftpm/
+/Packages/
+xcuserdata/
+*.xcodeproj
+Package.resolved
+
+# 本地运行时环境与模型（由 scripts/setup_*.sh 创建，不进版本库）
+runtime/
+models/
+build/
+dist/
+*.app
