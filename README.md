@@ -41,40 +41,50 @@ open "dist/OCR GUI.app"
 
 ## 引擎配置
 
-引擎配置是 JSON 文件，位于 `~/Library/Application Support/OCRGUI/Engines/<id>.json`。首次启动会自动生成 4 个：`vision`（启用）+ `paddle-classic` / `paddle-vl` / `xiaomi-ocr-0`（模板，禁用）。
+引擎与具体模型解耦：**GUI 只认三种通用适配器**（builtin-vision / openai-http / json-http），装什么模型由你决定。配置是 JSON 文件，位于 `~/Library/Application Support/OCRGUI/Engines/<id>.json`；首次启动自动生成 `vision`（启用）+ `custom-vlm` / `paddle-classic`（中性模板，禁用）。
 
-### 方式一：运行 setup 脚本（推荐）
-
-| 脚本 | 引擎 | 下载量 | 说明 |
-|---|---|---|---|
-| `scripts/setup_paddle_classic.sh` | Paddle 经典 PP-OCRv6（det+rec） | ~1.3GB | 行级坐标框+置信度，中文准确度好 |
-| `scripts/setup_paddle_vl.sh` | PaddleOCR-VL 1.6（MLX 4bit） | ~1.4GB | 整页 Markdown 版面还原（公式/表格），Apple GPU 加速 |
-| `scripts/setup_xiaomi.sh` | Xiaomi-OCR-0（实验性） | ~4-5GB | 小米 0.8B VLM（2026-09 发布），torch+transformers |
-| `scripts/setup_all.sh` | 交互式选择 | — | 上面三者的菜单入口 |
-
-脚本做三件事：在 `runtime/` 建独立 venv → 在 `models/` 下载模型 → 把**真实路径**写入引擎配置并启用。之后打开 App 设置（⌘,）点"启动"即可，或识别时自动拉起。
-
-`runtime/`、`models/` 均在 .gitignore 中，不进版本库；共享项目 = 共享 git 仓库，对方 clone 后重跑 setup 脚本即可复现。
-
-### 方式二：设置界面手动配置
-
-App 设置 → 编辑/新增引擎，填写 Base URL、模型、提示词、启动命令等（字段说明见 `docs/引擎配置规范.md`）。
-
-### 方式三：接入已在运行的外部服务
-
-如果本机已有 OpenAI 兼容的 OCR 服务（例如 webUI 项目已部署的 `http://127.0.0.1:8111/v1`），新建引擎只填 `base_url`、`model`、`prompt`，不填 launch 即可直接连接——参见 `docs/engines-examples/paddle-vl-attach-8111.json`。
-
-### 导入其他模型
-
-任何 HuggingFace transformers 的 image-text-to-text 模型都能接入：
+### 方式一：通用安装器（任意模型）
 
 ```zsh
-scripts/fetch_model.sh <HF repo>              # 下载到 models/<名字>
-# 然后设置里新增引擎：
-#   类型 openai-http
-#   启动命令 runtime/xiaomi-env/bin/python scripts/vlm_server.py --model <模型绝对路径> --port 8115
-#   健康检查 http://127.0.0.1:8115/health
+# 任意 HuggingFace transformers VLM 模型（torch 只装一次，多引擎共享 venv）
+scripts/setup_vlm_engine.sh --repo SeerRay-Lab/Xiaomi-OCR-0 --port 8114 \
+    --fallback-prompt "Task: Text Extraction."
+scripts/setup_vlm_engine.sh --repo Qwen/Qwen3.5-VL-2B-Instruct --port 8115
+
+# 任意 mlx-community 模型（Apple GPU 加速）
+scripts/setup_mlx_engine.sh --repo mlx-community/PaddleOCR-VL-1.6-4bit --port 8112
+
+# 项目自带的 Paddle 经典引擎（det+rec，行级坐标框+置信度）
+scripts/setup_paddle_classic.sh
+
+# 交互式菜单
+scripts/setup_all.sh
 ```
+
+安装器做三件事：建/复用 `runtime/` 下 venv → 下载模型到 `models/` → 把真实路径写入引擎配置并启用。之后在 App 设置（⌘,）点"启动"，或识别时自动拉起。
+
+### 方式二：示例配方
+
+`scripts/recipes/` 下是几行的小配方（给通用安装器传参），可直接跑也可当模板写自己的：
+
+```zsh
+scripts/recipes/xiaomi-ocr-0.sh    # Xiaomi-OCR-0（0.8B VLM，2026-09）
+scripts/recipes/paddle-vl.sh       # PaddleOCR-VL 1.6（MLX 4bit）
+```
+
+### 方式三：设置界面手动配置 / 外接已有服务
+
+设置 → 编辑/新增引擎（字段说明见 `docs/引擎配置规范.md`）。连接已在运行的 OpenAI 兼容服务（如 webUI 部署的 `http://127.0.0.1:8111/v1`）只需填 `base_url`、`model`、`prompt`，不填 launch——示例：`docs/engines-examples/paddle-vl-attach-8111.json`。
+
+### 提示词建议（VLM 类引擎，均可在设置里改）
+
+| 场景 | prompt | fallback_prompt |
+|---|---|---|
+| Markdown+LaTeX 转写（书籍/文档） | 把图片中的内容完整转写为 Markdown。所有数学公式用 LaTeX 表示… | `Task: Text Extraction.` |
+| 快速纯文本 | `Task: Text Extraction.` | —（可不填） |
+| PaddleOCR-VL | `Text Recognition:` | — |
+
+主提示词输出退化（图形页重复循环等）时会自动用 fallback_prompt 重试，并在导出时标注"纯文本兜底"。
 
 ## 数据与隐私
 
@@ -88,7 +98,7 @@ scripts/fetch_model.sh <HF repo>              # 下载到 models/<名字>
 Sources/OCRGUICore/     核心逻辑（可测试）：引擎协议/适配器、批处理、存储、导出
 Sources/OCRGUI/         SwiftUI 界面
 Tests/OCRGUITests/      52 个单元测试（Swift Testing）
-scripts/                setup/make-app/smoke 脚本 + 两个 Python 推理服务
+scripts/                通用安装器 + recipes 配方 + Python 推理服务（通用 vlm_server / paddle_classic）
 docs/                   引擎配置规范、验收说明
 runtime/ models/        venv 与模型（gitignore）
 ```

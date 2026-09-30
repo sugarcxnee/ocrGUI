@@ -51,6 +51,9 @@ struct EngineEditView: View {
                         TextField("提示词（可选）", text: Binding(
                             get: { config.prompt ?? "" },
                             set: { config.prompt = $0.isEmpty ? nil : $0 }))
+                        TextField("兜底提示词（可选，主输出退化时用它重试）", text: Binding(
+                            get: { config.fallbackPrompt ?? "" },
+                            set: { config.fallbackPrompt = $0.isEmpty ? nil : $0 }))
                         TextField("API Key（可选）", text: Binding(
                             get: { config.apiKey ?? "" },
                             set: { config.apiKey = $0.isEmpty ? nil : $0 }))

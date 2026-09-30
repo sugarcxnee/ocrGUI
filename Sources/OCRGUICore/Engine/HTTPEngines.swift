@@ -41,6 +41,22 @@ public struct OpenAICompatEngine: OCREngine {
     }
 
     public func recognize(image: CGImage, options: RecognizeOptions) async throws -> OcrPage {
+        var content = try await requestContent(image: image, prompt: config.prompt ?? "Text Recognition:")
+
+        // 主提示词输出退化（图形页等）→ 用兜底提示词重试
+        var usedFallback = false
+        if let fallbackPrompt = config.fallbackPrompt, OCRTextCleaner.isDegenerate(content) {
+            content = try await requestContent(image: image, prompt: fallbackPrompt)
+            usedFallback = true
+        }
+
+        return OcrPage(pageNumber: options.pageNumber,
+                       width: image.width, height: image.height,
+                       lines: [], markdown: content,
+                       usedFallback: usedFallback)
+    }
+
+    private func requestContent(image: CGImage, prompt: String) async throws -> String {
         try Task.checkCancellation()
 
         guard let base = config.baseURL, let url = URL(string: base + "/chat/completions") else {
@@ -56,7 +72,7 @@ public struct OpenAICompatEngine: OCREngine {
                 "role": "user",
                 "content": [
                     ["type": "input_image", "image_url": "data:image/png;base64," + png.base64EncodedString()],
-                    ["type": "text", "text": config.prompt ?? "Text Recognition:"],
+                    ["type": "text", "text": prompt],
                 ],
             ]],
             "max_tokens": 4096,
@@ -95,18 +111,13 @@ public struct OpenAICompatEngine: OCREngine {
         }
 
         // content 兼容字符串与分段数组两种形态
-        var text: String
         if let s = message["content"] as? String {
-            text = s
-        } else if let parts = message["content"] as? [[String: Any]] {
-            text = parts.compactMap { $0["text"] as? String }.joined()
-        } else {
-            throw EngineError.invalidResponse("content 不是字符串或分段数组")
+            return s
         }
-
-        return OcrPage(pageNumber: options.pageNumber,
-                       width: image.width, height: image.height,
-                       lines: [], markdown: text)
+        if let parts = message["content"] as? [[String: Any]] {
+            return parts.compactMap { $0["text"] as? String }.joined()
+        }
+        throw EngineError.invalidResponse("content 不是字符串或分段数组")
     }
 }
 

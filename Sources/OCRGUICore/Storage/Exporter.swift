@@ -42,7 +42,13 @@ public enum Exporter {
 
     public static func content(record: HistoryRecord, format: ExportFormat) throws -> String {
         switch format {
-        case .txt, .md:
+        case .txt:
+            return record.displayText
+        case .md:
+            // 多页未编辑的记录走"装订"：页眉页码清理、公式分隔符规范化、标题层级、页级注释
+            if record.editedText == nil && record.pages.count > 1 {
+                return MarkdownBinder.bind(record: record)
+            }
             return record.displayText
         case .json:
             return jsonString(record: record)

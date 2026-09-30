@@ -108,7 +108,7 @@ func validateLaunchFields() throws {
 
 // MARK: - EngineStore
 
-@Test("空目录首次加载会种子化默认引擎（vision 可用，外部引擎为模板）")
+@Test("空目录首次加载会种子化默认引擎（vision 可用，其余为中性模板）")
 func engineStoreSeedsDefaults() throws {
     let dir = FileManager.default.temporaryDirectory
         .appendingPathComponent("ocrgui-engines-\(UUID().uuidString)")
@@ -120,8 +120,10 @@ func engineStoreSeedsDefaults() throws {
     let ids = store.configs.map(\.id)
     #expect(ids.contains("vision"))
     #expect(ids.contains("paddle-classic"))
-    #expect(ids.contains("paddle-vl"))
-    #expect(ids.contains("xiaomi-ocr-0"))
+    #expect(ids.contains("custom-vlm"))
+    // 引擎模板不预设具体第三方模型——保持 GUI 引擎中立
+    #expect(!ids.contains("paddle-vl"))
+    #expect(!ids.contains("xiaomi-ocr-0"))
 
     let vision = store.configs.first { $0.id == "vision" }
     #expect(vision?.enabled == true)

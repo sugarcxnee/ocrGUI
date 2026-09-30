@@ -1,5 +1,5 @@
 import Foundation
-import Vision
+@preconcurrency import Vision
 
 /// 系统 Vision 框架引擎：零配置、完全离线、中英文行级识别（accurate 模式）。
 public struct VisionEngine: OCREngine {

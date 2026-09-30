@@ -38,9 +38,19 @@ struct ExporterTests {
         #expect(try Exporter.content(record: edited, format: .txt) == "改过的文本")
     }
 
-    @Test("md：原样输出 markdown / 行文本")
+    @Test("md：单页原样输出；多页走装订（含页注释与文档头）")
     func mdFormat() throws {
-        #expect(try Exporter.content(record: markdownRecord(), format: .md) == "# 标题\n\n| a | b |")
+        let single = HistoryRecord(
+            fileName: "one.png", sourcePath: nil, sourceKind: .image,
+            engineID: "e", engineName: "E",
+            pages: [OcrPage(pageNumber: 1, width: 1, height: 1, lines: [], markdown: "# 标题")],
+            editedText: nil)
+        #expect(try Exporter.content(record: single, format: .md) == "# 标题")
+
+        let bound = try Exporter.content(record: markdownRecord(), format: .md)
+        #expect(bound.contains("# paper.pdf"))
+        #expect(bound.contains("<!-- 第 1 页 -->"))
+        #expect(bound.contains("| a | b |"))
     }
 
     @Test("json：webUI 兼容结构（file_name/page_count/pages/lines/box 四点）")

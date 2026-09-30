@@ -84,13 +84,17 @@ public struct EngineConfig: Codable, Sendable, Equatable, Identifiable {
     public var apiKey: String?
     /// 单次识别请求超时（秒）
     public var timeout: TimeInterval
+    /// 兜底提示词：主提示词输出退化（重复/过短）时自动用它重试一次。
+    /// 适用于"Markdown 转写为主 + 纯文本兜底"的 VLM 引擎（如 Xiaomi-OCR-0）。
+    public var fallbackPrompt: String?
     public var launch: EngineLaunch?
     /// 配置说明 / 安装提示，显示在设置界面
     public var notes: String?
 
     public init(id: String, name: String, kind: EngineKind, enabled: Bool,
                 baseURL: String?, model: String?, prompt: String?, apiKey: String?,
-                timeout: TimeInterval, launch: EngineLaunch?, notes: String?) {
+                timeout: TimeInterval, launch: EngineLaunch?, notes: String?,
+                fallbackPrompt: String? = nil) {
         self.id = id
         self.name = name
         self.kind = kind
@@ -102,6 +106,7 @@ public struct EngineConfig: Codable, Sendable, Equatable, Identifiable {
         self.timeout = timeout
         self.launch = launch
         self.notes = notes
+        self.fallbackPrompt = fallbackPrompt
     }
 
     /// 语义校验（保存/启动前调用）
@@ -146,6 +151,7 @@ public struct EngineConfig: Codable, Sendable, Equatable, Identifiable {
         case id, name, kind, enabled
         case baseURL = "base_url", model, prompt
         case apiKey = "api_key"
+        case fallbackPrompt = "fallback_prompt"
         case timeout, launch, notes
     }
 
@@ -159,8 +165,25 @@ public struct EngineConfig: Codable, Sendable, Equatable, Identifiable {
         model = try c.decodeIfPresent(String.self, forKey: .model)
         prompt = try c.decodeIfPresent(String.self, forKey: .prompt)
         apiKey = try c.decodeIfPresent(String.self, forKey: .apiKey)
+        fallbackPrompt = try c.decodeIfPresent(String.self, forKey: .fallbackPrompt)
         timeout = try c.decodeIfPresent(TimeInterval.self, forKey: .timeout) ?? 300
         launch = try c.decodeIfPresent(EngineLaunch.self, forKey: .launch)
         notes = try c.decodeIfPresent(String.self, forKey: .notes)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(kind, forKey: .kind)
+        try c.encode(enabled, forKey: .enabled)
+        try c.encodeIfPresent(baseURL, forKey: .baseURL)
+        try c.encodeIfPresent(model, forKey: .model)
+        try c.encodeIfPresent(prompt, forKey: .prompt)
+        try c.encodeIfPresent(apiKey, forKey: .apiKey)
+        try c.encodeIfPresent(fallbackPrompt, forKey: .fallbackPrompt)
+        try c.encode(timeout, forKey: .timeout)
+        try c.encodeIfPresent(launch, forKey: .launch)
+        try c.encodeIfPresent(notes, forKey: .notes)
     }
 }

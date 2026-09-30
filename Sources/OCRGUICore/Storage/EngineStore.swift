@@ -96,7 +96,7 @@ public final class EngineStore {
         try data.write(to: directory.appendingPathComponent("\(config.id).json"), options: .atomic)
     }
 
-    // MARK: - 默认引擎（内置 + 模板）
+    // MARK: - 默认引擎（内置 + 中性模板）
 
     public static let defaultConfigs: [EngineConfig] = [
         EngineConfig(
@@ -108,6 +108,23 @@ public final class EngineStore {
             timeout: 120,
             launch: nil,
             notes: "macOS 自带 Vision 框架，零配置、完全离线，支持中英文行级识别（准确度中等）。"),
+        EngineConfig(
+            id: "custom-vlm",
+            name: "VLM 引擎（OpenAI 兼容，待安装）",
+            kind: .openaiHTTP,
+            enabled: false,
+            baseURL: "http://127.0.0.1:8114/v1",
+            model: nil,
+            prompt: nil,
+            apiKey: nil,
+            timeout: 600,
+            launch: EngineLaunch(
+                command: "/path/to/runtime/vlm-env/bin/python /path/to/scripts/vlm_server.py --model /path/to/models/<模型名> --host 127.0.0.1 --port 8114",
+                cwd: "/path/to/ocrGUI",
+                environment: [:],
+                healthURL: "http://127.0.0.1:8114/health",
+                readyTimeout: 300),
+            notes: "任意 HuggingFace VLM 模型：运行 scripts/setup_vlm_engine.sh --repo <HF repo> 一键安装；或连接任何已运行的 OpenAI 兼容服务（只填 base_url，不填 launch）。"),
         EngineConfig(
             id: "paddle-classic",
             name: "Paddle 经典 PP-OCRv6（det+rec）",
@@ -124,40 +141,6 @@ public final class EngineStore {
                 environment: ["PADDLE_PDX_CACHE_HOME": "/path/to/ocrGUI/models/paddlex_cache"],
                 healthURL: "http://127.0.0.1:8113/health",
                 readyTimeout: 180),
-            notes: "行级坐标框+置信度，中文准确度好。运行 scripts/setup_paddle_classic.sh 自动配置。"),
-        EngineConfig(
-            id: "paddle-vl",
-            name: "PaddleOCR-VL 1.6（MLX 加速）",
-            kind: .openaiHTTP,
-            enabled: false,
-            baseURL: "http://127.0.0.1:8112/v1",
-            model: "/path/to/ocrGUI/models/PaddleOCR-VL-1.6-4bit",
-            prompt: "Text Recognition:",
-            apiKey: nil,
-            timeout: 600,
-            launch: EngineLaunch(
-                command: "/path/to/ocrGUI/runtime/paddle-vl-env/bin/mlx_vlm.server --model /path/to/ocrGUI/models/PaddleOCR-VL-1.6-4bit --trust-remote-code --host 127.0.0.1 --port 8112",
-                cwd: "/path/to/ocrGUI",
-                environment: [:],
-                healthURL: "http://127.0.0.1:8112/health",
-                readyTimeout: 180),
-            notes: "整页版面还原，输出 Markdown（含 LaTeX 公式/表格）。运行 scripts/setup_paddle_vl.sh 自动配置。"),
-        EngineConfig(
-            id: "xiaomi-ocr-0",
-            name: "Xiaomi-OCR-0（实验性）",
-            kind: .openaiHTTP,
-            enabled: false,
-            baseURL: "http://127.0.0.1:8114/v1",
-            model: "/path/to/ocrGUI/models/Xiaomi-OCR-0",
-            prompt: "Task: Text Extraction.",
-            apiKey: nil,
-            timeout: 600,
-            launch: EngineLaunch(
-                command: "/path/to/ocrGUI/runtime/xiaomi-env/bin/python /path/to/ocrGUI/scripts/vlm_server.py --model /path/to/ocrGUI/models/Xiaomi-OCR-0 --host 127.0.0.1 --port 8114",
-                cwd: "/path/to/ocrGUI",
-                environment: [:],
-                healthURL: "http://127.0.0.1:8114/health",
-                readyTimeout: 300),
-            notes: "小米 0.8B VLM（2026-09 新发布，实验性）。运行 scripts/setup_xiaomi.sh 自动配置。"),
+            notes: "项目自带的 json-http 引擎示例：行级坐标框+置信度。运行 scripts/setup_paddle_classic.sh 自动配置。"),
     ]
 }
