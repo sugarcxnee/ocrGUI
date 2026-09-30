@@ -62,9 +62,10 @@ public enum EngineFactory {
         switch config.kind {
         case .builtinVision:
             return VisionEngine(config: config)
-        case .openaiHTTP, .jsonHTTP:
-            // P3：OpenAICompatEngine / JsonHttpEngine 就位后接入
-            throw EngineFactoryError.unsupportedKind(config.kind)
+        case .openaiHTTP:
+            return OpenAICompatEngine(config: config)
+        case .jsonHTTP:
+            return JsonHttpEngine(config: config)
         }
     }
 }

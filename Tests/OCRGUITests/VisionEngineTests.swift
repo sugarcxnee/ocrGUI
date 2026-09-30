@@ -80,18 +80,22 @@ func visionHealthAlwaysReady() async {
 
 // MARK: - EngineFactory
 
-@Test("工厂按 kind 构造引擎；未实现类型抛错")
-func factoryBuildsVision() throws {
+@Test("工厂按 kind 构造对应引擎")
+func factoryBuildsEngines() throws {
     let vision = EngineConfig(id: "vision", name: "V", kind: .builtinVision, enabled: true,
                               baseURL: nil, model: nil, prompt: nil, apiKey: nil,
                               timeout: 60, launch: nil, notes: nil)
-    let engine = try EngineFactory.make(config: vision)
-    #expect(engine is VisionEngine)
+    #expect(try EngineFactory.make(config: vision) is VisionEngine)
 
-    let other = EngineConfig(id: "x", name: "X", kind: .jsonHTTP, enabled: true,
-                             baseURL: "http://127.0.0.1:1", model: nil, prompt: nil, apiKey: nil,
-                             timeout: 60, launch: nil, notes: nil)
-    #expect(throws: EngineFactoryError.self) { try EngineFactory.make(config: other) }
+    let openai = EngineConfig(id: "x", name: "X", kind: .openaiHTTP, enabled: true,
+                              baseURL: "http://127.0.0.1:1/v1", model: nil, prompt: nil, apiKey: nil,
+                              timeout: 60, launch: nil, notes: nil)
+    #expect(try EngineFactory.make(config: openai) is OpenAICompatEngine)
+
+    let json = EngineConfig(id: "y", name: "Y", kind: .jsonHTTP, enabled: true,
+                            baseURL: "http://127.0.0.1:2", model: nil, prompt: nil, apiKey: nil,
+                            timeout: 60, launch: nil, notes: nil)
+    #expect(try EngineFactory.make(config: json) is JsonHttpEngine)
 }
 
 // MARK: - ImageIO 工具
