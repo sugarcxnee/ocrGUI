@@ -35,10 +35,16 @@ log "识别 $IMAGE（prompt: $PROMPT）…"
 "$PYTHON" - "$IMAGE" "$PORT" "$PROMPT" <<'PYEOF'
 import base64, json, sys, urllib.request
 image_path, port, prompt = sys.argv[1], sys.argv[2], sys.argv[3]
+
+# 从 /v1/models 取真实模型名（部分服务如 mlx_vlm.server 会校验 model 字段）
+with urllib.request.urlopen(f"http://127.0.0.1:{port}/v1/models", timeout=10) as resp:
+    models = json.load(resp)
+model_id = models["data"][0]["id"] if models.get("data") else "default"
+
 with open(image_path, "rb") as f:
     b64 = base64.b64encode(f.read()).decode()
 payload = {
-    "model": "smoke",
+    "model": model_id,
     "messages": [{"role": "user", "content": [
         {"type": "input_image", "image_url": f"data:image/png;base64,{b64}"},
         {"type": "text", "text": prompt},
@@ -53,6 +59,7 @@ req = urllib.request.Request(
 with urllib.request.urlopen(req, timeout=600) as resp:
     result = json.load(resp)
 content = result["choices"][0]["message"]["content"]
+print(f"（model={model_id}）")
 print("--- 识别结果 ---")
 print(content)
 print("----------------")

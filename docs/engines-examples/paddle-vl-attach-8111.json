@@ -1,0 +1,12 @@
+{
+  "id": "paddle-vl-8111",
+  "name": "PaddleOCR-VL（外接 8111）",
+  "kind": "openai-http",
+  "enabled": true,
+  "base_url": "http://127.0.0.1:8111/v1",
+  "model": "mlx_models/PaddleOCR-VL-1.6-4bit",
+  "prompt": "Text Recognition:",
+  "timeout": 600,
+  "launch": null,
+  "notes": "连接已在运行的服务（如 webUI 的 start_mlx_service.sh 启动的 8111）。无 launch 字段=App 不托管进程，服务需自行启动。"
+}
