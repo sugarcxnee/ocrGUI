@@ -60,6 +60,21 @@ struct SettingsPane: View {
                     }
                 }
             }
+            Section("通用") {
+                Stepper("PDF 渲染精度：\(Int(model.pdfDPI)) DPI", value: Binding(
+                    get: { model.pdfDPI },
+                    set: { model.pdfDPI = $0 }), in: 72...600, step: 18)
+                    .help("越高越清晰，识别更准但更慢（默认 150）")
+                HStack {
+                    Button("打开历史记录目录") {
+                        NSWorkspace.shared.open(model.history.directory)
+                    }
+                    Spacer()
+                    Text("\(model.history.records.count) 条记录")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .listStyle(.inset)
         .task { await model.refreshEngineHealths() }

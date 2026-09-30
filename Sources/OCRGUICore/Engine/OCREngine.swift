@@ -33,7 +33,7 @@ public struct RecognizeOptions: Sendable {
     }
 }
 
-public enum EngineError: Error, Equatable {
+public enum EngineError: Error, Equatable, CustomStringConvertible {
     case canceled
     case imageDecodeFailed
     case invalidResponse(String)
@@ -41,6 +41,18 @@ public enum EngineError: Error, Equatable {
     case notReady(String)
     case launchFailed(String)
     case requestFailed(String)
+
+    public var description: String {
+        switch self {
+        case .canceled: return "已取消"
+        case .imageDecodeFailed: return "图片解码失败"
+        case .invalidResponse(let detail): return "响应无效：\(detail)"
+        case .httpStatus(let code, let body): return "服务返回 HTTP \(code)：\(body.prefix(200))"
+        case .notReady(let detail): return "服务未就绪：\(detail)"
+        case .launchFailed(let detail): return "启动失败：\(detail)"
+        case .requestFailed(let detail): return "请求失败：\(detail)"
+        }
+    }
 }
 
 /// 所有 OCR 引擎的统一接口。新增引擎 = 新配置 + 对应适配器，核心 UI 不变。

@@ -1,11 +1,21 @@
 import SwiftUI
 import OCRGUICore
 
-/// 左栏：历史记录列表（可搜索、右键删除），重启后仍在
+/// 左栏：历史记录列表（可搜索、右键删除），重启后仍在；底部为处理队列
 struct HistorySidebar: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        VStack(spacing: 0) {
+            recordList
+            if !model.batch.jobs.isEmpty {
+                Divider()
+                QueuePanel()
+            }
+        }
+    }
+
+    private var recordList: some View {
         List(selection: Binding(
             get: { model.selectedRecordID },
             set: { model.selectedRecordID = $0 })) {
@@ -37,6 +47,102 @@ struct HistorySidebar: View {
                 set: { model.searchText = $0 }))
                 .textFieldStyle(.roundedBorder)
                 .padding(8)
+        }
+    }
+}
+
+// MARK: - 处理队列面板
+
+struct QueuePanel: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text("队列 \(model.batch.doneCount)/\(model.batch.jobs.count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if model.batch.isRunning {
+                    Button {
+                        model.batch.cancel()
+                    } label: {
+                        Label("取消", systemImage: "stop.fill")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .controlSize(.small)
+                } else {
+                    Button("清空") {
+                        model.batch.clearFinished()
+                    }
+                    .controlSize(.small)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.top, 6)
+
+            ScrollView {
+                VStack(spacing: 2) {
+                    ForEach(model.batch.jobs) { job in
+                        QueueRow(job: job)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.bottom, 6)
+            }
+            .frame(maxHeight: 148)
+        }
+        .background(.bar)
+    }
+}
+
+private struct QueueRow: View {
+    let job: BatchJob
+
+    private var icon: String {
+        switch job.kind {
+        case .image: return "photo"
+        case .pdf: return "doc.richtext"
+        case .clipboard: return "doc.on.clipboard"
+        case .screenshot: return "camera.viewfinder"
+        case .other: return "doc"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            Text(job.fileName)
+                .lineLimit(1)
+                .font(.caption)
+            Spacer()
+            statusView
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private var statusView: some View {
+        switch job.status {
+        case .pending:
+            Text("等待").font(.caption2).foregroundStyle(.secondary)
+        case .running(let page, let total):
+            HStack(spacing: 4) {
+                ProgressView().controlSize(.mini)
+                Text(total > 1 ? "第\(page)/\(total)页" : "识别中")
+                    .font(.caption2).foregroundStyle(.blue)
+            }
+        case .done:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.caption2).foregroundStyle(.green)
+        case .failed(let reason):
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.caption2).foregroundStyle(.red)
+                .help(reason)
+        case .cancelled:
+            Text("已取消").font(.caption2).foregroundStyle(.orange)
         }
     }
 }

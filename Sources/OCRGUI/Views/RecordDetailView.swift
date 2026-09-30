@@ -8,6 +8,7 @@ struct RecordDetailView: View {
 
     @State private var editedText: String = ""
     @State private var selectedPageNumber: Int = 1
+    @State private var pdfPageImages: [Int: NSImage] = [:]
 
     var body: some View {
         HSplitView {
@@ -65,9 +66,21 @@ struct RecordDetailView: View {
         }
     }
 
-    /// 优先按 sourcePath 取原图；剪贴板来源退回缩略图
+    /// PDF 按页渲染预览；其他来源优先 sourcePath 原图，剪贴板退回缩略图
     private func originalImage(forPage page: Int) -> NSImage? {
-        if record.sourceKind != .pdf, let path = record.sourcePath {
+        if record.sourceKind == .pdf, let path = record.sourcePath {
+            if let cached = pdfPageImages[page] { return cached }
+            guard let url = URL(string: path),
+                  let loads = try? PDFRenderer.render(url: url, dpi: 110),
+                  let load = loads.first(where: { $0.pageNumber == page }) else {
+                return nil
+            }
+            let image = NSImage(cgImage: load.image,
+                                size: NSSize(width: load.image.width, height: load.image.height))
+            pdfPageImages[page] = image
+            return image
+        }
+        if let path = record.sourcePath {
             if let image = NSImage(contentsOfFile: path) {
                 return image
             }
