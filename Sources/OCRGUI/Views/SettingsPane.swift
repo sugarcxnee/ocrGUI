@@ -7,6 +7,8 @@ struct SettingsPane: View {
     @State private var editingConfig: EngineConfig?
     @State private var creatingNew = false
     @State private var addingModel = false
+    @State private var pendingDeleteID: String?
+    @State private var restoringSnapshot: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,6 +58,20 @@ struct SettingsPane: View {
         }
         .sheet(isPresented: $addingModel) {
             AddModelSheet()
+        }
+        .confirmationDialog("从快照恢复引擎配置",
+                            isPresented: Binding(get: { restoringSnapshot != nil },
+                                                 set: { if !$0 { restoringSnapshot = nil } }),
+                            titleVisibility: .visible) {
+            ForEach(Array(model.engineStore.availableBackups().prefix(5)), id: \.self) { name in
+                Button("恢复 \(name)") {
+                    try? model.engineStore.restoreBackup(name)
+                    restoringSnapshot = nil
+                }
+            }
+            Button("取消", role: .cancel) { restoringSnapshot = nil }
+        } message: {
+            Text("恢复会覆盖当前所有引擎配置（当前配置也会先被快照）。")
         }
     }
 
@@ -112,6 +128,10 @@ struct SettingsPane: View {
             Button("打开配置目录") {
                 NSWorkspace.shared.open(model.engineStore.directory)
             }
+            Menu("快照") {
+                Button("立即备份") { model.engineStore.snapshotBackup() }
+                Button("恢复快照…") { restoringSnapshot = "" }
+            }
         }
         .padding(8)
     }
@@ -142,6 +162,7 @@ private struct EngineRow: View {
     let config: EngineConfig
     let health: EngineHealth?
     var onEdit: () -> Void
+    @State private var confirmDelete = false
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -195,8 +216,20 @@ private struct EngineRow: View {
                 }
                 Button("编辑…", action: onEdit)
                 if config.id != "vision" {
-                    Button("删除", role: .destructive) {
-                        try? model.engineStore.delete(id: config.id)
+                    Button("删除…", role: .destructive) {
+                        confirmDelete = true
+                    }
+                    .confirmationDialog("删除引擎 \(config.name)？",
+                                        isPresented: $confirmDelete,
+                                        titleVisibility: .visible) {
+                        Button("删除（可从快照恢复）", role: .destructive) {
+                            model.engineStore.snapshotBackup()
+                            try? model.engineStore.delete(id: config.id)
+                            Task { await model.refreshEngineHealths() }
+                        }
+                        Button("取消", role: .cancel) {}
+                    } message: {
+                        Text("删除前会自动创建快照，可在右下角\"快照 → 恢复快照\"找回。")
                     }
                 }
             }

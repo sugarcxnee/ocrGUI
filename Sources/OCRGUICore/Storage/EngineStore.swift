@@ -68,6 +68,51 @@ public final class EngineStore {
         try loadOrCreateDefaults()
     }
 
+    // MARK: - 配置快照（防误删/误操作丢失）
+
+    /// 把当前引擎目录全部 JSON 快照到 Engines.backup/（保留最近 5 份）
+    public func snapshotBackup() {
+        let fm = FileManager.default
+        let backupDir = directory.deletingLastPathComponent().appendingPathComponent("Engines.backup")
+        try? fm.createDirectory(at: backupDir, withIntermediateDirectories: true)
+        let stamp = Int(Date().timeIntervalSince1970)
+        let target = backupDir.appendingPathComponent("snapshot-\(stamp)")
+        try? fm.copyItem(at: directory, to: target)
+        // 清理旧快照（保留 5 份）
+        let snapshots = (try? fm.contentsOfDirectory(at: backupDir, includingPropertiesForKeys: nil))?
+            .filter { $0.lastPathComponent.hasPrefix("snapshot-") }
+            .sorted { $0.lastPathComponent > $1.lastPathComponent } ?? []
+        for old in snapshots.dropFirst(5) {
+            try? fm.removeItem(at: old)
+        }
+    }
+
+    /// 列出可用快照（新→旧）
+    public func availableBackups() -> [String] {
+        let backupDir = directory.deletingLastPathComponent().appendingPathComponent("Engines.backup")
+        let snapshots = (try? FileManager.default.contentsOfDirectory(at: backupDir, includingPropertiesForKeys: nil))?
+            .filter { $0.lastPathComponent.hasPrefix("snapshot-") }
+            .sorted { $0.lastPathComponent > $1.lastPathComponent } ?? []
+        return snapshots.map(\.lastPathComponent)
+    }
+
+    /// 从指定快照恢复引擎配置（当前配置先快照一份再覆盖）
+    public func restoreBackup(_ name: String) throws {
+        let backupDir = directory.deletingLastPathComponent().appendingPathComponent("Engines.backup")
+        let source = backupDir.appendingPathComponent(name)
+        guard FileManager.default.fileExists(atPath: source.path) else { return }
+        snapshotBackup()  // 恢复前先备份现状
+        let fm = FileManager.default
+        // 清空当前目录后整目录拷贝
+        for file in (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [] {
+            try? fm.removeItem(at: file)
+        }
+        for file in (try? fm.contentsOfDirectory(at: source, includingPropertiesForKeys: nil)) ?? [] {
+            try? fm.copyItem(at: file, to: directory.appendingPathComponent(file.lastPathComponent))
+        }
+        try loadOrCreateDefaults()
+    }
+
     public func save(_ config: EngineConfig) throws {
         try config.validate()
         try persist(config)
