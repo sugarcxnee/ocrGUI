@@ -1,7 +1,10 @@
 import Foundation
+import Observation
 
 /// 引擎配置存储：目录内每个 <id>.json 即一个引擎。
-/// 首次启动种子化内置 Vision 与外部引擎模板（模板默认禁用，等 setup 脚本改写）。
+/// 首次启动种子化内置 Vision 与中性模板（模板默认禁用，等 setup 脚本改写）。
+/// @Observable：安装器写入新引擎后 UI 自动刷新。
+@Observable
 public final class EngineStore {
     public let directory: URL
     public private(set) var configs: [EngineConfig] = []
@@ -58,6 +61,11 @@ public final class EngineStore {
     public func loadForTest() -> [EngineConfig] {
         try? loadOrCreateDefaults()
         return configs
+    }
+
+    /// 安装器写入新配置后重载目录
+    public func reload() throws {
+        try loadOrCreateDefaults()
     }
 
     public func save(_ config: EngineConfig) throws {

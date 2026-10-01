@@ -6,6 +6,7 @@ struct SettingsPane: View {
     @Environment(AppModel.self) private var model
     @State private var editingConfig: EngineConfig?
     @State private var creatingNew = false
+    @State private var addingModel = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,6 +50,9 @@ struct SettingsPane: View {
                 }
             }
         }
+        .sheet(isPresented: $addingModel) {
+            AddModelSheet()
+        }
     }
 
     private var engineList: some View {
@@ -82,7 +86,12 @@ struct SettingsPane: View {
 
     private var bottomBar: some View {
         HStack {
-            Button("新增引擎…") { creatingNew = true }
+            Button {
+                addingModel = true
+            } label: {
+                Label("添加模型…", systemImage: "square.and.arrow.down")
+            }
+            Button("手动新增引擎…") { creatingNew = true }
             Spacer()
             Button("刷新状态") {
                 Task { await model.refreshEngineHealths() }

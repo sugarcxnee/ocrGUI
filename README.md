@@ -43,7 +43,11 @@ open "dist/OCR GUI.app"
 
 引擎与具体模型解耦：**GUI 只认三种通用适配器**（builtin-vision / openai-http / json-http），装什么模型由你决定。配置是 JSON 文件，位于 `~/Library/Application Support/OCRGUI/Engines/<id>.json`；首次启动自动生成 `vision`（启用）+ `custom-vlm` / `paddle-classic`（中性模板，禁用）。
 
-### 方式一：通用安装器（任意模型）
+### 方式零：应用内安装（推荐，无需终端）
+
+设置（⌘,）→ **“添加模型…”** → 选后端（MLX / transformers VLM）→ 粘贴 HF 仓库地址 → “下载并添加”。应用会自动调用安装脚本完成下载（实时日志、可取消、国内镜像已预填），完成后引擎直接出现在列表里。首次使用需选一次 ocrGUI 项目目录（含 scripts/ 的仓库根目录，之后记住）。
+
+### 方式一：通用安装器（任意模型，终端）
 
 ```zsh
 # 任意 HuggingFace transformers VLM 模型（torch 只装一次，多引擎共享 venv）
