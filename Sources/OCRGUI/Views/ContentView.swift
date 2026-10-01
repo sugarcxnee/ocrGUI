@@ -28,14 +28,33 @@ struct ContentView: View {
 
     @ViewBuilder
     private var detailView: some View {
-        if model.batch.isRunning, let job = model.currentRunningJob {
-            LiveRecognizeView(job: job, pages: model.livePages)
+        if model.batch.isRunning, let record = model.currentBrowsingRecord {
+            RecordDetailView(record: record)
+                .id(record.id)
+                .overlay(alignment: .bottomTrailing) { backToLiveButton }
+        } else if model.batch.isRunning, let job = model.currentRunningJob {
+            LiveRecognizeView(job: job,
+                              pages: model.livePages,
+                              completed: model.batchCompletedRecords,
+                              onSelect: { model.browseRecord(id: $0) })
         } else if let record = model.selectedRecord {
             RecordDetailView(record: record)
                 .id(record.id)
         } else {
             emptyState
         }
+    }
+
+    private var backToLiveButton: some View {
+        Button {
+            model.backToLiveProgress()
+        } label: {
+            Label("返回实时进度", systemImage: "arrow.clockwise.circle")
+                .labelStyle(.titleAndIcon)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
+        .padding(12)
     }
 
     /// 顶部全局进度条（批次运行或存在未清空任务时显示）
@@ -65,6 +84,15 @@ struct ContentView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
+                    // 耗时与预计剩余（TimelineView 每秒刷新）
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        if let elapsed = batch.elapsed {
+                            Text(Self.timingText(elapsed: elapsed, eta: batch.estimatedRemainingSeconds))
+                                .font(.caption2)
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     Text("\(done) 成功\(failed > 0 ? " · \(failed) 失败" : "")\(cancelled > 0 ? " · \(cancelled) 取消" : "") · \(batch.pendingCount) 等待")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -80,14 +108,40 @@ struct ContentView: View {
                         .controlSize(.small)
                     }
                 }
-                ProgressView(value: Double(done), total: Double(max(total, 1)))
-                    .controlSize(.small)
+                // 页级进度（单文件多页时文件级条不动，这条才是真实进度）
+                let pagesDone = batch.pagesRecognized + batch.pagesResumed
+                let pagesTotal = max(batch.totalPagesKnown, pagesDone, 1)
+                ProgressView(value: Double(pagesDone), total: Double(pagesTotal)) {
+                    Text("页 \(pagesDone)/\(batch.totalPagesKnown > 0 ? "\(batch.totalPagesKnown)" : "?")\(batch.pagesResumed > 0 ? "（含断点复用 \(batch.pagesResumed)）" : "")")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .controlSize(.small)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
             .background(.bar)
             .overlay(Divider(), alignment: .bottom)
         }
+    }
+
+    /// 95秒 → "01:35"；>1小时 → "1:02:03"
+    static func durationText(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded())
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let secs = total % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        }
+        return String(format: "%02d:%02d", minutes, secs)
+    }
+
+    static func timingText(elapsed: TimeInterval, eta: TimeInterval?) -> String {
+        if let eta {
+            return "已用 \(durationText(elapsed)) · 预计剩余 ~\(durationText(eta))"
+        }
+        return "已用 \(durationText(elapsed))"
     }
 
     @ViewBuilder

@@ -1,10 +1,13 @@
 import SwiftUI
 import OCRGUICore
 
-/// 批次进行中的实时预览：当前文件 + 正在识别的页 + 已完成页文本（逐页追加，自动滚动）
+/// 批次进行中的实时预览：当前文件 + 正在识别的页 + 已完成页文本（逐页追加，自动滚动）；
+/// 顶部提供本批次已完成文件的快捷入口（点击浏览，不打断识别）
 struct LiveRecognizeView: View {
     let job: BatchJob
     let pages: [OcrPage]
+    var completed: [HistoryRecord] = []
+    var onSelect: (UUID) -> Void = { _ in }
 
     private var runningPage: (page: Int, total: Int)? {
         if case .running(let page, let total) = job.status {
@@ -16,6 +19,10 @@ struct LiveRecognizeView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if !completed.isEmpty {
+                completedChips
+                Divider()
+            }
             Divider()
             if pages.isEmpty {
                 waitingView
@@ -24,6 +31,37 @@ struct LiveRecognizeView: View {
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    /// 本批次已完成文件（点击查看结果）
+    private var completedChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                Text("已完成 \(completed.count)：")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ForEach(Array(completed.enumerated().reversed()), id: \.element.id) { index, record in
+                    Button {
+                        onSelect(record.id)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.green)
+                            Text(record.fileName)
+                                .font(.caption)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.quaternary, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+        }
     }
 
     private var header: some View {

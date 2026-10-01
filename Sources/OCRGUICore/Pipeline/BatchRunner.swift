@@ -135,6 +135,43 @@ public final class BatchRunner {
         jobs.filter { $0.status == .done }.count
     }
 
+    // MARK: - 批次统计（页级进度 / 耗时 / ETA）
+
+    /// 本批次开始时刻（未开始为 nil）
+    public private(set) var batchStartedAt: Date?
+    /// 已加载任务的总页数（随任务开始逐步补全）
+    public private(set) var totalPagesKnown = 0
+    /// 本批次新识别的页数
+    public private(set) var pagesRecognized = 0
+    /// 从断点复用的页数（未重复识别）
+    public private(set) var pagesResumed = 0
+
+    /// 已用秒数；批次未开始为 nil
+    public var elapsed: TimeInterval? {
+        guard let batchStartedAt else { return nil }
+        return Date().timeIntervalSince(batchStartedAt)
+    }
+
+    /// 预计剩余秒数：按"新识别+复用"页的平均耗时估算；
+    /// 无已完成页或批次已结束（没有待处理任务）时为 nil
+    public var estimatedRemainingSeconds: TimeInterval? {
+        guard isRunning, batchStartedAt != nil,
+              let pendingPages = pendingPageEstimate, pendingPages > 0 else { return nil }
+        let finishedPages = Double(pagesRecognized + pagesResumed)
+        guard finishedPages > 0, let elapsed else { return nil }
+        let perPage = elapsed / finishedPages
+        guard perPage.isFinite, perPage > 0 else { return nil }
+        return TimeInterval(pendingPages) * perPage
+    }
+
+    /// 剩余页数估计：已知总页数 − 已完成；尚有任务未加载时再加未知任务的粗略占位（按 1 页计）
+    private var pendingPageEstimate: Int? {
+        guard isRunning else { return nil }
+        let loaded = totalPagesKnown - pagesRecognized - pagesResumed
+        let unloadedJobs = jobs.filter { $0.status == .pending }.count
+        return loaded + unloadedJobs
+    }
+
     // MARK: - 运行
 
     public func cancel() {
@@ -163,6 +200,10 @@ public final class BatchRunner {
                          ensureService: (@Sendable () async throws -> Void)?) async {
         guard !isRunning else { return }
         isRunning = true
+        batchStartedAt = Date()
+        totalPagesKnown = 0
+        pagesRecognized = 0
+        pagesResumed = 0
         defer { isRunning = false }
 
         if let ensureService {
@@ -195,6 +236,7 @@ public final class BatchRunner {
                 continue
             }
             onJobStarted?(jobs[index], loads.count)
+            totalPagesKnown += loads.count
 
             // 断点：同文件（大小/DPI/引擎/提示词一致）此前已识别的页直接复用
             var checkpointKey: String?
@@ -209,6 +251,9 @@ public final class BatchRunner {
                 .map(\.pageNumber))
             var pages = (checkpointKey.flatMap { checkpoints?.load(key: $0)?.pages } ?? [])
                 .sorted { $0.pageNumber < $1.pageNumber }
+            if !donePageNumbers.isEmpty {
+                pagesResumed += donePageNumbers.count
+            }
 
             // 逐页识别（跳过断点已完成的页）
             do {
@@ -220,6 +265,7 @@ public final class BatchRunner {
                         options: RecognizeOptions(pageNumber: load.pageNumber))
                     pages.append(page)
                     pages.sort { $0.pageNumber < $1.pageNumber }
+                    pagesRecognized += 1
                     onPageRecognized?(jobs[index], page)
                     // 每页落盘断点：中途取消/崩溃不丢已完成页
                     if let checkpoints, let key = checkpointKey {
