@@ -169,19 +169,6 @@ private struct EngineRow: View {
             Circle()
                 .fill(statusColor)
                 .frame(width: 10, height: 10)
-            Toggle("启用", isOn: Binding(
-                get: { config.enabled },
-                set: { on in
-                    var copy = config
-                    copy.enabled = on
-                    try? model.engineStore.save(copy)
-                    // 关闭即停服务（对齐"勾上=可在外部使用"的直觉）
-                    if !on {
-                        Task { await model.stopEngine(copy) }
-                    }
-                }))
-                .labelsHidden()
-                .help(config.enabled ? "在主窗口引擎菜单中显示；关闭会同时停止其服务" : "在主窗口引擎菜单中显示")
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(config.name).bold()

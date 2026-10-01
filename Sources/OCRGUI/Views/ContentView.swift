@@ -188,7 +188,8 @@ struct ContentView: View {
                 get: { model.selectedEngineID },
                 set: { model.selectedEngineID = $0 })) {
                 ForEach(model.enabledEngines) { engine in
-                    Text(engine.name).tag(engine.id)
+                    Text(engine.name + (model.isEngineConfigured(engine) ? "" : "（未配置）"))
+                        .tag(engine.id)
                 }
             }
             .pickerStyle(.menu)
