@@ -83,6 +83,8 @@ public final class BatchRunner {
     public var onBatchError: ((String) -> Void)?
     /// 每页识别完成即回调（实时预览用）
     public var onPageRecognized: ((BatchJob, OcrPage) -> Void)?
+    /// 任务开始（页面加载完成）回调：页数已知
+    public var onJobStarted: ((BatchJob, Int) -> Void)?
 
     private let history: HistoryStore
     private let checkpoints: CheckpointStore?
@@ -192,6 +194,7 @@ public final class BatchRunner {
                 jobs[index].status = .failed(error.described)
                 continue
             }
+            onJobStarted?(jobs[index], loads.count)
 
             // 断点：同文件（大小/DPI/引擎/提示词一致）此前已识别的页直接复用
             var checkpointKey: String?

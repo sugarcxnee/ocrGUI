@@ -28,8 +28,8 @@ struct ContentView: View {
 
     @ViewBuilder
     private var detailView: some View {
-        if model.batch.isRunning, let live = model.liveFileName {
-            LiveRecognizeView(fileName: live, pages: model.livePages)
+        if model.batch.isRunning, let job = model.currentRunningJob {
+            LiveRecognizeView(job: job, pages: model.livePages)
         } else if let record = model.selectedRecord {
             RecordDetailView(record: record)
                 .id(record.id)
@@ -52,7 +52,12 @@ struct ContentView: View {
             let cancelled = batch.jobs.filter { $0.status == .cancelled }.count
             VStack(spacing: 3) {
                 HStack {
-                    if batch.isRunning {
+                    if batch.isRunning, let current = model.currentRunningJob,
+                       case .running(let page, let pageTotal) = current.status, pageTotal > 1 {
+                        Text("处理中 \(min(done + 1, total))/\(total) · \(current.fileName) 第\(page)/\(pageTotal)页")
+                            .font(.caption).bold()
+                            .lineLimit(1)
+                    } else if batch.isRunning {
                         Text("处理中 \(min(done + 1, total))/\(total)")
                             .font(.caption).bold()
                     } else {
