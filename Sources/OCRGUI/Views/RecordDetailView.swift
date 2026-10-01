@@ -12,6 +12,8 @@ struct RecordDetailView: View {
     @State private var renderingPage: Int?
     @State private var showBoxes = false
     @State private var zoom: CGFloat = 1
+    @State private var actualPixels = false
+    @State private var pageInput = ""
     @State private var renderFailed = false
     @State private var pageLineCount: Int = 0
     @State private var pageMarkdown = false
@@ -26,8 +28,12 @@ struct RecordDetailView: View {
         .onAppear {
             editedText = record.displayText
             selectedPageNumber = record.pages.first?.pageNumber ?? 1
+            pageInput = String(selectedPageNumber)
             pageLineCount = record.pages.reduce(0) { $0 + $1.lines.count }
             pageMarkdown = record.pages.contains { $0.markdown != nil }
+        }
+        .onChange(of: selectedPageNumber) { _, newValue in
+            pageInput = String(newValue)
         }
         .onDisappear {
             persistEdit()
@@ -38,7 +44,30 @@ struct RecordDetailView: View {
 
     private var previewPane: some View {
         VStack(spacing: 0) {
-            if record.pages.count > 1 {
+            if record.pages.count > 8 {
+                HStack(spacing: 10) {
+                    Button {
+                        stepPage(-1)
+                    } label: { Image(systemName: "chevron.left") }
+                    .disabled(selectedPageNumber <= minPageNumber)
+                    Spacer()
+                    TextField("页码", text: $pageInput)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 72)
+                        .multilineTextAlignment(.center)
+                        .onSubmit { jumpToPageInput() }
+                    Text("/ \(record.pages.count) 页")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        stepPage(1)
+                    } label: { Image(systemName: "chevron.right") }
+                    .disabled(selectedPageNumber >= maxPageNumber)
+                }
+                .controlSize(.regular)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            } else if record.pages.count > 1 {
                 Picker("页", selection: $selectedPageNumber) {
                     ForEach(record.pages, id: \.pageNumber) { page in
                         Text("第 \(page.pageNumber) 页").tag(page.pageNumber)
@@ -65,21 +94,59 @@ struct RecordDetailView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    /// 缩放：−/＋/适应；触控板双指捏合亦可
+    /// 缩放：−/＋/适应/1:1 实际像素（上限 32×）；触控板双指捏合亦可
     private var zoomControls: some View {
         HStack(spacing: 2) {
-            Button { zoom = max(0.2, zoom / 1.3) } label: { Image(systemName: "minus.magnifyingglass") }
-            Button { zoom = 1 } label: { Image(systemName: "arrow.up.left.and.down.right.magnifyingglass") }
+            Button {
+                actualPixels = false
+                zoom = max(0.2, zoom / 1.5)
+            } label: { Image(systemName: "minus.magnifyingglass") }
+            Button {
+                actualPixels = false
+                zoom = 1
+            } label: { Image(systemName: "arrow.up.left.and.down.right.magnifyingglass") }
                 .help("适应窗口")
-            Button { zoom = min(8, zoom * 1.3) } label: { Image(systemName: "plus.magnifyingglass") }
-            Text(String(format: "%.0f%%", zoom * 100))
+            Button {
+                actualPixels = true   // 1 渲染像素 = 1 屏幕像素（200DPI 渲染下非常清晰）
+            } label: { Text("1:1") }
+                .help("实际像素")
+            Button {
+                actualPixels = false
+                zoom = min(32, zoom * 1.5)
+            } label: { Image(systemName: "plus.magnifyingglass") }
+            Text(zoomLabel)
                 .font(.caption2)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
-                .frame(width: 42)
+                .frame(width: 48)
         }
         .controlSize(.small)
         .buttonStyle(.borderless)
+    }
+
+    private var zoomLabel: String {
+        actualPixels ? "1:1" : String(format: "%.0f%%", zoom * 100)
+    }
+
+    // MARK: 翻页辅助
+
+    private var minPageNumber: Int { record.pages.first?.pageNumber ?? 1 }
+    private var maxPageNumber: Int { record.pages.last?.pageNumber ?? 1 }
+
+    private func stepPage(_ delta: Int) {
+        let numbers = record.pages.map(\.pageNumber)
+        guard let index = numbers.firstIndex(of: selectedPageNumber) else { return }
+        let target = index + delta
+        guard numbers.indices.contains(target) else { return }
+        selectedPageNumber = numbers[target]
+    }
+
+    private func jumpToPageInput() {
+        guard let value = Int(pageInput.trimmingCharacters(in: .whitespaces)) else { return }
+        let numbers = record.pages.map(\.pageNumber)
+        let clamped = min(max(value, minPageNumber), maxPageNumber)
+        // 页码可能有空洞（失败页）：取 ≥ 目标页的最近页
+        selectedPageNumber = numbers.first { $0 >= clamped } ?? maxPageNumber
     }
 
     @ViewBuilder
@@ -88,13 +155,17 @@ struct RecordDetailView: View {
             GeometryReader { geo in
                 ScrollView([.vertical, .horizontal]) {
                     ImageWithBoxes(nsImage: nsImage, page: currentPage,
-                                   showBoxes: showBoxes, zoom: zoom, container: geo.size)
+                                   showBoxes: showBoxes, zoom: zoom, container: geo.size,
+                                   actualPixels: actualPixels)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 }
             }
             .gesture(
                 MagnificationGesture()
-                    .onChanged { value in zoom = min(8, max(0.2, value)) }
+                    .onChanged { value in
+                        actualPixels = false
+                        zoom = min(32, max(0.2, value))
+                    }
                     .onEnded { _ in }
             )
         } else if renderingPage == selectedPageNumber {
@@ -298,6 +369,8 @@ struct ImageWithBoxes: View {
     let showBoxes: Bool
     var zoom: CGFloat = 1
     var container: CGSize = CGSize(width: 800, height: 600)
+    /// 1 渲染像素 = 1 屏幕像素（忽略 zoom 倍率）
+    var actualPixels: Bool = false
 
     var body: some View {
         GeometryReader { geo in
@@ -307,7 +380,7 @@ struct ImageWithBoxes: View {
                                container.height / nsImage.size.height,
                                geo.size.width / nsImage.size.width,
                                geo.size.height / nsImage.size.height)
-                let scale = base * zoom
+                let scale = actualPixels ? 1.0 : base * zoom
                 let drawn = CGSize(width: nsImage.size.width * scale,
                                    height: nsImage.size.height * scale)
                 let offset = CGPoint(x: max(0, (geo.size.width - drawn.width) / 2),
