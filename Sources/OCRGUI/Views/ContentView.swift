@@ -242,7 +242,7 @@ struct ContentView: View {
             Menu {
                 ForEach(ExportFormat.allCases, id: \.self) { format in
                     Button(format.label) {
-                        if let record = model.selectedRecord {
+                        if let record = model.currentBrowsingRecord ?? model.selectedRecord {
                             exportCurrentRecord(record, format: format)
                         }
                     }
@@ -250,7 +250,7 @@ struct ContentView: View {
             } label: {
                 Label("导出", systemImage: "square.and.arrow.up")
             }
-            .disabled(model.selectedRecord == nil)
+            .disabled(model.currentBrowsingRecord == nil && model.selectedRecord == nil)
 
             Divider()
 

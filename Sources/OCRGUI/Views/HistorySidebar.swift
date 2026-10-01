@@ -150,12 +150,32 @@ private struct QueueRow: View {
 private struct HistoryRow: View {
     let record: HistoryRecord
 
+    /// 缩略图缓存：避免列表滚动/刷新时反复解码 PNG
+    private static let thumbCache = NSCache<NSString, NSImage>()
+
+    private var thumbnail: NSImage? {
+        guard let path = record.thumbnailPath else { return nil }
+        if let cached = Self.thumbCache.object(forKey: path as NSString) { return cached }
+        guard let image = NSImage(contentsOfFile: path) else { return nil }
+        Self.thumbCache.setObject(image, forKey: path as NSString)
+        return image
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            thumbnail
-                .frame(width: 36, height: 36)
-                .background(Color(nsColor: .quaternaryLabelColor))
-                .clipShape(RoundedRectangle(cornerRadius: 5))
+            Group {
+                if let image = thumbnail {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    Image(systemName: "doc.text")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 36, height: 36)
+            .background(Color(nsColor: .quaternaryLabelColor))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
             VStack(alignment: .leading, spacing: 2) {
                 Text(record.fileName)
                     .lineLimit(1)
@@ -170,19 +190,6 @@ private struct HistoryRow: View {
             }
         }
         .padding(.vertical, 2)
-    }
-
-    @ViewBuilder
-    private var thumbnail: some View {
-        if let path = record.thumbnailPath,
-           let image = NSImage(contentsOfFile: path) {
-            Image(nsImage: image)
-                .resizable()
-                .scaledToFit()
-        } else {
-            Image(systemName: "doc.text")
-                .foregroundStyle(.secondary)
-        }
     }
 
     private var kindIcon: some View {
