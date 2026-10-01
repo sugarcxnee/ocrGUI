@@ -1,17 +1,22 @@
 # OCR GUI — macOS 本地通用 OCR 桌面应用
 
+**当前版本：v0.2.0**（2026-10-01，见文末[版本历史](#版本历史)）
+
 原生 SwiftUI 应用，离线优先、数据不出本机。支持多种本地 OCR 引擎插拔（内置 Vision 零配置可用，可接入 Paddle 经典 / PaddleOCR-VL / Xiaomi-OCR-0 等），支持图片、PDF、文件夹、剪贴板、截图输入，批量识别带进度与取消，结果可编辑、复制、导出，历史记录持久保存。
 
 ## 特性
 
 - **零配置内置引擎**：系统 Vision 框架（中英文、行级坐标框+置信度、完全离线）
-- **可插拔引擎**：引擎 = 一个 JSON 配置 + 内置适配器（OpenAI 兼容 HTTP / JSON HTTP），新增引擎不改核心 UI
-- **引擎托管**：App 自动拉起/停止本地推理服务，冷启动等待 + 状态灯
+- **可插拔引擎**：引擎 = 一个 JSON 配置 + 内置适配器（OpenAI 兼容 HTTP / JSON HTTP），新增引擎不改核心 UI；**设置内“添加模型”粘贴 HF 仓库地址一键安装**（实时日志、可取消、国内镜像预填）
+- **引擎托管**：App 自动拉起/停止本地推理服务，冷启动等待 + 状态灯；全部引擎直接可选（未配置的会标注）
 - **多输入**：图片多选、文件夹递归、拖放、剪贴板、交互截图（选区）
-- **批量管线**：队列、页级进度、随时取消、单文件失败不影响其余
-- **PDF**：逐页渲染（DPI 可调 72–600，默认 150），多页分别识别与预览
-- **结果处理**：编辑保存、复制、导出 txt / md / json / csv（与 webUI 导出格式兼容）
-- **历史记录**：JSON + 缩略图落盘，重启仍在，可搜索、可删除
+- **批量管线**：队列、**页级进度条 + 已用时间/预计剩余**、随时取消、单文件失败不影响其余；**页级断点续跑**（取消/崩溃不丢已完成页，重跑自动跳过）
+- **实时反馈**：识别中的大文件逐页实时显示识别文本；已完成文件随时点开浏览（不打断批次）
+- **PDF**：逐页渲染（DPI 可调 72–600，默认 150），多页分别识别与预览；预览支持 1:1 实际像素 / 32× 缩放、大文档页码直达
+- **结果处理**：编辑保存（多页记录带页界标记、切页联动定位）、复制、导出 **txt / md / json / csv / tex**（多页 Markdown 自动“装订”：去页眉页码、公式分隔符规范化、标题层级、坐标框 overlay）
+- **性能**：大文档编辑用 NSTextView（数十万字符流畅）、PDF 单页异步渲染、缩略图缓存
+- **历史记录**：JSON + 缩略图 + 识别用时落盘，重启仍在，可搜索、可删除
+- **配置安全**：引擎配置启动自动快照（保留 5 份）、删除需确认、设置内一键恢复快照
 
 ## 环境要求
 
@@ -26,7 +31,7 @@ git clone <本仓库> && cd ocrGUI
 
 # 1. 构建 & 测试
 swift build
-swift test          # 52 个单元测试应全绿
+swift test          # 94 个单元测试应全绿
 
 # 2. 打包 .app（产出 dist/OCR GUI.app）
 zsh scripts/make-app.sh
@@ -41,7 +46,7 @@ open "dist/OCR GUI.app"
 
 ## 引擎配置
 
-引擎与具体模型解耦：**GUI 只认三种通用适配器**（builtin-vision / openai-http / json-http），装什么模型由你决定。配置是 JSON 文件，位于 `~/Library/Application Support/OCRGUI/Engines/<id>.json`；首次启动自动生成 `vision`（启用）+ `custom-vlm` / `paddle-classic`（中性模板，禁用）。
+引擎与具体模型解耦：**GUI 只认三种通用适配器**（builtin-vision / openai-http / json-http），装什么模型由你决定。配置是 JSON 文件，位于 `~/Library/Application Support/OCRGUI/Engines/<id>.json`；首次启动自动生成 `vision` + `custom-vlm` / `paddle-classic`（中性模板）。**所有引擎在选择器中直接可选**，未安装环境的会标注“（未配置）”。
 
 ### 方式零：应用内安装（推荐，无需终端）
 
@@ -102,7 +107,7 @@ scripts/recipes/glm-ocr.sh         # GLM-OCR（智谱 0.9B，MLX 4bit）
 ```
 Sources/OCRGUICore/     核心逻辑（可测试）：引擎协议/适配器、批处理、存储、导出
 Sources/OCRGUI/         SwiftUI 界面
-Tests/OCRGUITests/      52 个单元测试（Swift Testing）
+Tests/OCRGUITests/      94 个单元测试（Swift Testing，含真实渲染回归）
 scripts/                通用安装器 + recipes 配方 + Python 推理服务（通用 vlm_server / paddle_classic）
 docs/                   引擎配置规范、验收说明
 runtime/ models/        venv 与模型（gitignore）
@@ -136,9 +141,30 @@ zsh scripts/setup_xiaomi.sh
 ## 开发
 
 ```zsh
-swift build && swift test     # TDD，52 测试
+swift build && swift test     # TDD，94 测试
 zsh scripts/smoke_paddle_classic.sh   # 经典引擎服务冒烟（需先 setup 或传入可用 python）
 zsh scripts/smoke_vlm.sh 8114         # VLM 服务冒烟（服务启动后）
 ```
 
 许可证：MIT（见 LICENSE）。
+
+## 版本历史
+
+### v0.2.0（2026-10-01）
+
+- 应用内“添加模型”安装器（设置 → 添加模型：粘贴 HF 仓库即装，实时日志/可取消/镜像预填）
+- 引擎中立化重构：通用安装器（`setup_vlm_engine.sh` / `setup_mlx_engine.sh`）+ `scripts/recipes/` 配方；默认模板不再预置第三方模型
+- 新增引擎配方：GLM-OCR（MLX 4bit，实测 8–15s/页）、PaddleOCR-VL（MLX，5.7s/页）
+- 页级断点续跑（CheckpointStore）：取消/崩溃不丢已完成页，重跑自动跳过
+- 页级进度条 + 已用时间/预计剩余；批次结束计时冻结、进度条自动收起
+- 识别中实时文本预览；已完成文件即时浏览（不打断批次）
+- 大文档体验：NSTextView 编辑（流畅）、PDF 单页异步渲染（修整本渲染卡顿）、预览 1:1/32× 缩放、页码直达输入框
+- 导出新增 .tex（ctexart）；多页 Markdown“装订”（页眉页码清理、公式分隔符规范化、标题层级）；`fallback_prompt` 退化兜底（跨引擎安全）
+- 多页编辑视图分页标记 + 切页联动定位；历史记录显示识别用时
+- 引擎配置快照（启动自动备份、删除确认、一键恢复）
+- 引擎勾选框移除：添加即可选，未配置引擎标注
+- 设置入口：主窗口工具栏齿轮按钮
+
+### v0.1.0（2026-09-30）
+
+MVP：Vision 内置引擎、三适配器引擎系统（OpenAI 兼容 / JSON HTTP）、进程托管、批量管线（取消/失败隔离）、PDF 逐页、四格式导出、历史持久化、三引擎真机验证（Paddle 经典 / PaddleOCR-VL@8111 / Xiaomi-OCR-0）。
