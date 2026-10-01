@@ -288,6 +288,9 @@ struct RecordDetailView: View {
 
     private var metaText: String {
         var parts = ["\(record.engineName) · \(record.pages.count) 页"]
+        if let duration = record.duration {
+            parts.append("用时 " + ContentView.durationText(duration))
+        }
         if pageLineCount > 0 {
             parts.append("\(pageLineCount) 行")
         }

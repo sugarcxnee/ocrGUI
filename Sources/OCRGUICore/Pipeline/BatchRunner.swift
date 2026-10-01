@@ -178,6 +178,11 @@ public final class BatchRunner {
         runTask?.cancel()
     }
 
+    /// 仅供测试：读取历史记录
+    public func historyRecordsForTest() -> [HistoryRecord] {
+        history.records
+    }
+
     /// 启动批处理（返回 Task 句柄，可 await 等待完成）
     @discardableResult
     public func start(engineConfig: EngineConfig,
@@ -219,6 +224,7 @@ public final class BatchRunner {
 
         while true {
             guard let index = jobs.firstIndex(where: { $0.status == .pending }) else { break }
+            let jobStartedAt = Date()
 
             do {
                 try Task.checkCancellation()
@@ -286,6 +292,7 @@ public final class BatchRunner {
                                        engineID: engineConfig.id,
                                        engineName: engineConfig.name,
                                        pages: pages,
+                                       duration: Date().timeIntervalSince(jobStartedAt),
                                        editedText: nil)
             let thumbnail = loads.first.flatMap { ImageTools.thumbnailPNG(from: $0.image) }
             do {

@@ -30,6 +30,10 @@ struct BatchStatsTests {
         #expect(runner.totalPagesKnown == 4)
         #expect(runner.pagesRecognized == 4)
         #expect(runner.pagesResumed == 0)
+        // 每条记录带用时
+        for record in runner.historyRecordsForTest() {
+            #expect((record.duration ?? 0) > 0)
+        }
         let elapsed = try #require(runner.elapsed)
         #expect(elapsed >= 0)
         // 已完成批次不再给 ETA

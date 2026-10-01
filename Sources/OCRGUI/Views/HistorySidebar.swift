@@ -183,6 +183,11 @@ private struct HistoryRow: View {
                     kindIcon
                     Text(record.engineName)
                         .foregroundStyle(.secondary)
+                    if let duration = record.duration {
+                        Text(Self.durationText(duration))
+                            .monospacedDigit()
+                            .foregroundStyle(.tertiary)
+                    }
                     Text(record.createdAt.formatted(.dateTime.month().day().hour().minute()))
                         .foregroundStyle(.tertiary)
                 }
@@ -195,6 +200,17 @@ private struct HistoryRow: View {
     private var kindIcon: some View {
         Image(systemName: iconFor(record.sourceKind))
             .foregroundStyle(.tertiary)
+    }
+
+    static func durationText(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded())
+        if total >= 3600 {
+            return String(format: "%d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
+        }
+        if total >= 60 {
+            return String(format: "%d分%02d秒", total / 60, total % 60)
+        }
+        return "\(total)秒"
     }
 
     private func iconFor(_ kind: SourceKind) -> String {
