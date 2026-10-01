@@ -27,7 +27,8 @@
 ## 快速开始
 
 ```zsh
-git clone <本仓库> && cd ocrGUI
+git clone https://github.com/<owner>/ocrGUI.git && cd ocrGUI
+# （fork 后把 <owner> 换成你的 GitHub 用户名）
 
 # 1. 构建 & 测试
 swift build
