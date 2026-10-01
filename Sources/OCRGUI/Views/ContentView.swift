@@ -123,6 +123,13 @@ struct ContentView: View {
                 Label("导出", systemImage: "square.and.arrow.up")
             }
             .disabled(model.selectedRecord == nil)
+
+            Divider()
+
+            SettingsLink {
+                Label("设置", systemImage: "gearshape")
+            }
+            .help("引擎管理与设置（也可用应用菜单 ⌘,）")
         }
     }
 

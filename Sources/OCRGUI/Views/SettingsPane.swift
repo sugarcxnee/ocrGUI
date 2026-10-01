@@ -90,8 +90,17 @@ struct SettingsPane: View {
                 addingModel = true
             } label: {
                 Label("添加模型…", systemImage: "square.and.arrow.down")
+                    .bold()
             }
-            Button("手动新增引擎…") { creatingNew = true }
+            .help("从 HuggingFace 下载并安装新模型（推荐，自动完成环境与配置）")
+
+            Button {
+                creatingNew = true
+            } label: {
+                Label("连接外部服务…", systemImage: "network")
+            }
+            .help("高级：手动填写配置，连接已在运行的 OpenAI 兼容服务或自定义引擎")
+
             Spacer()
             Button("刷新状态") {
                 Task { await model.refreshEngineHealths() }
