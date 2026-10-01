@@ -30,6 +30,17 @@ public enum PDFRenderer {
         return result
     }
 
+    /// 只渲染某一页（1-based，越界返回 nil）——大 PDF 页面预览用，避免整本渲染
+    public static func renderPage(url: URL, page: Int, dpi: CGFloat) -> PageLoad? {
+        guard let doc = CGPDFDocument(url as CFURL), !doc.isEncrypted,
+              page >= 1, page <= doc.numberOfPages,
+              let pdfPage = doc.page(at: page),
+              let image = renderPage(pdfPage, dpi: dpi) else {
+            return nil
+        }
+        return PageLoad(image: image, pageNumber: page, totalPages: doc.numberOfPages)
+    }
+
     private static func renderPage(_ page: CGPDFPage, dpi: CGFloat) -> CGImage? {
         let box = page.getBoxRect(.mediaBox)
         let scale = dpi / 72.0

@@ -69,6 +69,20 @@ struct PDFRendererTests {
         #expect(pages[0].totalPages == 2)
     }
 
+    @Test("单页渲染 API：只渲染指定页（大 PDF 预览不能整本渲染）")
+    func rendersSinglePage() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = try makeTestPDF(pages: [(200, 100), (200, 100), (200, 100)], dir: dir)
+
+        let page3 = try #require(PDFRenderer.renderPage(url: url, page: 3, dpi: 72))
+        #expect(page3.image.width == 200)
+        #expect(page3.pageNumber == 3)
+
+        // 越界页返回 nil
+        #expect(PDFRenderer.renderPage(url: url, page: 9, dpi: 72) == nil)
+    }
+
     @Test("加密/损坏 PDF 抛错")
     func invalidPDFThrows() {
         let bad = FileManager.default.temporaryDirectory

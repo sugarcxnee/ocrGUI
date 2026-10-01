@@ -11,6 +11,8 @@ struct RecordDetailView: View {
     @State private var pdfPageImages: [Int: NSImage] = [:]
     @State private var renderingPage: Int?
     @State private var showBoxes = false
+    @State private var zoom: CGFloat = 1
+    @State private var renderFailed = false
     @State private var pageLineCount: Int = 0
     @State private var pageMarkdown = false
 
@@ -45,32 +47,74 @@ struct RecordDetailView: View {
                 .pickerStyle(.segmented)
                 .padding(8)
             }
-            if currentPage?.lines.isEmpty == false {
-                Toggle("显示坐标框", isOn: $showBoxes)
-                    .toggleStyle(.checkbox)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 4)
+            HStack(spacing: 8) {
+                if currentPage?.lines.isEmpty == false {
+                    Toggle("坐标框", isOn: $showBoxes)
+                        .toggleStyle(.checkbox)
+                }
+                Spacer()
+                zoomControls
             }
-            ScrollView([.vertical]) {
-                pagePreview
-                    .frame(maxWidth: .infinity)
-                    .padding(8)
-            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 4)
+
+            Divider()
+
+            pagePreview
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    /// 缩放：−/＋/适应；触控板双指捏合亦可
+    private var zoomControls: some View {
+        HStack(spacing: 2) {
+            Button { zoom = max(0.2, zoom / 1.3) } label: { Image(systemName: "minus.magnifyingglass") }
+            Button { zoom = 1 } label: { Image(systemName: "arrow.up.left.and.down.right.magnifyingglass") }
+                .help("适应窗口")
+            Button { zoom = min(8, zoom * 1.3) } label: { Image(systemName: "plus.magnifyingglass") }
+            Text(String(format: "%.0f%%", zoom * 100))
+                .font(.caption2)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(width: 42)
+        }
+        .controlSize(.small)
+        .buttonStyle(.borderless)
     }
 
     @ViewBuilder
     private var pagePreview: some View {
         if let nsImage = imageForPage(selectedPageNumber) {
-            ImageWithBoxes(nsImage: nsImage, page: currentPage, showBoxes: showBoxes)
-                .frame(minHeight: 320)
+            GeometryReader { geo in
+                ScrollView([.vertical, .horizontal]) {
+                    ImageWithBoxes(nsImage: nsImage, page: currentPage,
+                                   showBoxes: showBoxes, zoom: zoom, container: geo.size)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                }
+            }
+            .gesture(
+                MagnificationGesture()
+                    .onChanged { value in zoom = min(8, max(0.2, value)) }
+                    .onEnded { _ in }
+            )
         } else if renderingPage == selectedPageNumber {
             ProgressView("渲染第 \(selectedPageNumber) 页…")
-                .frame(maxWidth: .infinity, minHeight: 320)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if renderFailed || record.sourceKind == .clipboard || record.sourceKind == .screenshot {
+            VStack(spacing: 8) {
+                Image(systemName: "photo").font(.title)
+                Text(record.thumbnailPath != nil ? "无原文件，仅缩略图" : "原文件不可用")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let path = record.thumbnailPath {
+                    ImageWithBoxes(nsImage: NSImage(contentsOfFile: path),
+                                   page: currentPage, showBoxes: false, zoom: zoom,
+                                   container: CGSize(width: 300, height: 300))
+                        .frame(minHeight: 240)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            ImageWithBoxes(nsImage: nil, page: currentPage, showBoxes: false)
+            Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -78,7 +122,7 @@ struct RecordDetailView: View {
         record.pages.first { $0.pageNumber == selectedPageNumber } ?? record.pages.first
     }
 
-    /// 页图像：缓存 → 普通图片同步快路径 → PDF 异步渲染（不卡主线程）
+    /// 页图像：缓存 → 普通图片同步快路径 → PDF 单页异步渲染（高 DPI，供缩放核对）
     private func imageForPage(_ page: Int) -> NSImage? {
         if let cached = pdfPageImages[page] { return cached }
         if record.sourceKind == .pdf, let path = record.sourcePath {
@@ -89,8 +133,9 @@ struct RecordDetailView: View {
             pdfPageImages[page] = image
             return image
         }
-        if let path = record.thumbnailPath {
-            return NSImage(contentsOfFile: path)
+        if let path = record.thumbnailPath, let image = NSImage(contentsOfFile: path) {
+            pdfPageImages[page] = image
+            return image
         }
         return nil
     }
@@ -98,14 +143,17 @@ struct RecordDetailView: View {
     private func renderPDFPage(_ page: Int, path: String) {
         guard renderingPage != page else { return }
         renderingPage = page
+        renderFailed = false
         let url = URL(fileURLWithPath: path)
         let pageNumber = page
         Task.detached(priority: .userInitiated) {
-            let loads = (try? PDFRenderer.render(url: url, dpi: 110)) ?? []
-            let image = loads.first { $0.pageNumber == pageNumber }
-                .map { NSImage(cgImage: $0.image, size: NSSize(width: $0.image.width, height: $0.image.height)) }
+            let load = PDFRenderer.renderPage(url: url, page: pageNumber, dpi: 200)
+            let image = load.map {
+                NSImage(cgImage: $0.image, size: NSSize(width: $0.image.width, height: $0.image.height))
+            }
             await MainActor.run {
                 pdfPageImages[pageNumber] = image
+                if image == nil { renderFailed = true }
                 if renderingPage == pageNumber { renderingPage = nil }
             }
         }
@@ -248,16 +296,22 @@ struct ImageWithBoxes: View {
     let nsImage: NSImage?
     let page: OcrPage?
     let showBoxes: Bool
+    var zoom: CGFloat = 1
+    var container: CGSize = CGSize(width: 800, height: 600)
 
     var body: some View {
         GeometryReader { geo in
             if let nsImage, nsImage.size.width > 0, nsImage.size.height > 0 {
-                let scale = min(geo.size.width / nsImage.size.width,
-                                geo.size.height / nsImage.size.height)
+                // 以传入容器（或几何区域）的等比适配尺寸为 100%，再乘缩放系数
+                let base = min(container.width / nsImage.size.width,
+                               container.height / nsImage.size.height,
+                               geo.size.width / nsImage.size.width,
+                               geo.size.height / nsImage.size.height)
+                let scale = base * zoom
                 let drawn = CGSize(width: nsImage.size.width * scale,
                                    height: nsImage.size.height * scale)
-                let offset = CGPoint(x: (geo.size.width - drawn.width) / 2,
-                                     y: (geo.size.height - drawn.height) / 2)
+                let offset = CGPoint(x: max(0, (geo.size.width - drawn.width) / 2),
+                                     y: max(0, (geo.size.height - drawn.height) / 2))
                 ZStack(alignment: .topLeading) {
                     Image(nsImage: nsImage)
                         .resizable()
