@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 // MARK: - 导出格式
 
 public enum ExportFormat: String, CaseIterable, Sendable {
-    case txt, md, json, csv
+    case txt, md, json, csv, tex
 
     public var label: String {
         switch self {
@@ -12,6 +12,7 @@ public enum ExportFormat: String, CaseIterable, Sendable {
         case .md: return "Markdown (.md)"
         case .json: return "JSON (.json)"
         case .csv: return "CSV 表格 (.csv)"
+        case .tex: return "LaTeX 文档 (.tex)"
         }
     }
 
@@ -21,6 +22,7 @@ public enum ExportFormat: String, CaseIterable, Sendable {
         case .md: return "md"
         case .json: return "json"
         case .csv: return "csv"
+        case .tex: return "tex"
         }
     }
 
@@ -30,6 +32,7 @@ public enum ExportFormat: String, CaseIterable, Sendable {
         case .md: return UTType(filenameExtension: "md") ?? .plainText
         case .json: return .json
         case .csv: return UTType(filenameExtension: "csv") ?? .plainText
+        case .tex: return UTType(filenameExtension: "tex") ?? .plainText
         }
     }
 }
@@ -50,11 +53,37 @@ public enum Exporter {
                 return MarkdownBinder.bind(record: record)
             }
             return record.displayText
+        case .tex:
+            return texString(record: record)
         case .json:
             return jsonString(record: record)
         case .csv:
             return csvString(record: record)
         }
+    }
+
+    // MARK: - LaTeX 文档（webUI tex 导出的等价物：ctexart 骨架，公式分隔符转回 \(..\) / \[.. \]）
+
+    private static func texString(record: HistoryRecord) -> String {
+        var body = record.displayText
+        if let display = try? NSRegularExpression(pattern: #"\$\$(.+?)\$\$"#,
+                                                  options: [.dotMatchesLineSeparators]) {
+            body = display.stringByReplacingMatches(
+                in: body, range: NSRange(body.startIndex..., in: body),
+                withTemplate: "\\\\[$1\\\\]")  // $$..$$ → \[..\]
+        }
+        if let inline = try? NSRegularExpression(pattern: #"\$([^$\n]+?)\$"#) {
+            body = inline.stringByReplacingMatches(
+                in: body, range: NSRange(body.startIndex..., in: body),
+                withTemplate: "\\\\($1\\\\)")  // $..$ → \(..\)
+        }
+        return """
+        \\documentclass[UTF8]{ctexart}
+        \\usepackage{amsmath,amssymb}
+        \\begin{document}
+        \(body)
+        \\end{document}
+        """
     }
 
     /// csv 带 UTF-8 BOM（Excel 直接打开不乱码），其余 UTF-8

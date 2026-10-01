@@ -22,16 +22,85 @@ struct ContentView: View {
                 model.importURLs(urls)
             }
         }
+        .overlay(alignment: .top) { progressStrip }
         .overlay(alignment: .bottom) { statusBar }
     }
 
     @ViewBuilder
     private var detailView: some View {
-        if let record = model.selectedRecord {
+        if model.batch.isRunning, let live = model.liveFileName {
+            LiveRecognizeView(fileName: live, pages: model.livePages)
+        } else if let record = model.selectedRecord {
             RecordDetailView(record: record)
                 .id(record.id)
         } else {
             emptyState
+        }
+    }
+
+    /// 顶部全局进度条（批次运行或存在未清空任务时显示）
+    @ViewBuilder
+    private var progressStrip: some View {
+        let batch = model.batch
+        if !batch.jobs.isEmpty {
+            let total = batch.jobs.count
+            let done = batch.doneCount
+            let failed = batch.jobs.filter {
+                if case .failed = $0.status { return true }
+                return false
+            }.count
+            let cancelled = batch.jobs.filter { $0.status == .cancelled }.count
+            VStack(spacing: 3) {
+                HStack {
+                    if batch.isRunning {
+                        Text("处理中 \(min(done + 1, total))/\(total)")
+                            .font(.caption).bold()
+                    } else {
+                        Text("批次结束 \(done)/\(total)")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text("\(done) 成功\(failed > 0 ? " · \(failed) 失败" : "")\(cancelled > 0 ? " · \(cancelled) 取消" : "") · \(batch.pendingCount) 等待")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    if batch.isRunning {
+                        Button("取消全部", role: .destructive) {
+                            batch.cancel()
+                        }
+                        .controlSize(.small)
+                    } else if done + failed + cancelled == total {
+                        Button("清空队列") {
+                            batch.clearFinished()
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                ProgressView(value: Double(done), total: Double(max(total, 1)))
+                    .controlSize(.small)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(.bar)
+            .overlay(Divider(), alignment: .bottom)
+        }
+    }
+
+    @ViewBuilder
+    private var statusBar: some View {
+        if let status = model.liveStatusText {
+            HStack(spacing: 8) {
+                if model.batch.isRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Text(status.text)
+                    .foregroundStyle(status.isError ? Color.red : Color.secondary)
+                    .lineLimit(1)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.bar)
         }
     }
 
@@ -159,27 +228,6 @@ struct ContentView: View {
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             model.importFolder(url)
-        }
-    }
-
-    @ViewBuilder
-    private var statusBar: some View {
-        let message = model.errorMessage.map { (text: $0, isError: true) }
-            ?? model.statusMessage.map { (text: $0, isError: false) }
-        if model.batch.isRunning || message != nil {
-            HStack(spacing: 8) {
-                if model.batch.isRunning {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-                Text(message?.text ?? "")
-                    .foregroundStyle(message?.isError == true ? Color.red : Color.secondary)
-                    .lineLimit(1)
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.bar)
         }
     }
 }

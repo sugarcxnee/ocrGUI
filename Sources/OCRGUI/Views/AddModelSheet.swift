@@ -10,12 +10,33 @@ struct AddModelSheet: View {
     @State private var repo = ModelInstallRequest.Backend.mlx.sampleRepo
     @State private var displayName = ""
     @State private var port = ""
-    @State private var prompt = "把图片中的内容完整转写为 Markdown。所有数学公式用 LaTeX 表示（行内用 $...$），不要遗漏任何文字，不要总结。"
+    @State private var promptPreset = PromptPreset.markdownLaTeX
+    @State private var prompt = PromptPreset.markdownLaTeX.text
     @State private var fallbackPrompt = ""
     @State private var pipMirror = "https://pypi.tuna.tsinghua.edu.cn/simple"
     @State private var hfMirror = "https://hf-mirror.com"
     @State private var projectDir = ""
     @State private var advancedVisible = false
+
+    /// 常用提示词预设（装好后仍可在引擎配置里改）
+    enum PromptPreset: String, CaseIterable, Identifiable {
+        case markdownLaTeX = "Markdown + LaTeX（推荐，文档/书籍）"
+        case plainText = "纯文本提取（最快）"
+        case custom = "自定义"
+
+        var id: String { rawValue }
+
+        var text: String {
+            switch self {
+            case .markdownLaTeX:
+                return "把图片中的内容完整转写为 Markdown。所有数学公式用 LaTeX 表示（行内用 $...$），不要遗漏任何文字，不要总结。"
+            case .plainText:
+                return "Task: Text Extraction."
+            case .custom:
+                return ""
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -53,11 +74,25 @@ struct AddModelSheet: View {
                 }
 
                 Section("提示词") {
+                    Picker("预设", selection: $promptPreset) {
+                        ForEach(PromptPreset.allCases) { preset in
+                            Text(preset.rawValue).tag(preset)
+                        }
+                    }
+                    .onChange(of: promptPreset) { _, new in
+                        if new != .custom {
+                            prompt = new.text
+                            fallbackPrompt = new == .plainText ? "" : fallbackPrompt
+                        }
+                    }
                     TextField("识别提示词", text: $prompt, axis: .vertical)
                         .lineLimit(2...)
                     if backend == .transformersVLM {
                         TextField("兜底提示词（可选，输出退化时重试）", text: $fallbackPrompt)
                     }
+                    Text("提示词决定模型输出风格；识别后的结果随时可导出为 txt / md / json / csv / tex 五种格式")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section {

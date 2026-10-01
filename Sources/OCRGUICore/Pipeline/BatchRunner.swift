@@ -81,12 +81,17 @@ public final class BatchRunner {
     public var onRecordAdded: ((HistoryRecord) -> Void)?
     /// 整批失败（如服务启动失败）回调
     public var onBatchError: ((String) -> Void)?
+    /// 每页识别完成即回调（实时预览用）
+    public var onPageRecognized: ((BatchJob, OcrPage) -> Void)?
 
     private let history: HistoryStore
+    private let checkpoints: CheckpointStore?
     private var runTask: Task<Void, Never>?
 
-    public init(history: HistoryStore) {
+    /// - Parameter checkpoints: 页级断点存储；nil = 不落盘（测试/一次性场景）
+    public init(history: HistoryStore, checkpoints: CheckpointStore? = nil) {
         self.history = history
+        self.checkpoints = checkpoints
     }
 
     // MARK: - 队列操作
@@ -188,15 +193,35 @@ public final class BatchRunner {
                 continue
             }
 
-            // 逐页识别
-            var pages: [OcrPage] = []
+            // 断点：同文件（大小/DPI/引擎/提示词一致）此前已识别的页直接复用
+            var checkpointKey: String?
+            if checkpoints != nil, let url = jobs[index].url {
+                let size = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+                checkpointKey = CheckpointStore.jobKey(path: url.path, fileSize: size,
+                                                       dpi: Int(dpi),
+                                                       engineID: engineConfig.id,
+                                                       prompt: engineConfig.prompt)
+            }
+            let donePageNumbers = Set((checkpointKey.flatMap { checkpoints?.load(key: $0)?.pages } ?? [])
+                .map(\.pageNumber))
+            var pages = (checkpointKey.flatMap { checkpoints?.load(key: $0)?.pages } ?? [])
+                .sorted { $0.pageNumber < $1.pageNumber }
+
+            // 逐页识别（跳过断点已完成的页）
             do {
-                for load in loads {
+                for load in loads where !donePageNumbers.contains(load.pageNumber) {
                     jobs[index].status = .running(page: load.pageNumber, totalPages: load.totalPages)
                     try Task.checkCancellation()
-                    pages.append(try await engine.recognize(
+                    let page = try await engine.recognize(
                         image: load.image,
-                        options: RecognizeOptions(pageNumber: load.pageNumber)))
+                        options: RecognizeOptions(pageNumber: load.pageNumber))
+                    pages.append(page)
+                    pages.sort { $0.pageNumber < $1.pageNumber }
+                    onPageRecognized?(jobs[index], page)
+                    // 每页落盘断点：中途取消/崩溃不丢已完成页
+                    if let checkpoints, let key = checkpointKey {
+                        try? checkpoints.save(JobCheckpoint(jobKey: key, pages: pages))
+                    }
                 }
             } catch is CancellationError {
                 jobs[index].status = .cancelled
@@ -219,6 +244,10 @@ public final class BatchRunner {
             } catch {
                 jobs[index].status = .failed("保存历史失败：\(error.localizedDescription)")
                 continue
+            }
+            // 完成后清除断点
+            if let key = checkpointKey {
+                checkpoints?.delete(key: key)
             }
             jobs[index].status = .done
             onRecordAdded?(record)

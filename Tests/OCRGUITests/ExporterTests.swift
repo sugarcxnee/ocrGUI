@@ -94,6 +94,20 @@ struct ExporterTests {
         #expect(csv.contains("\"包含,逗号 和 \"\"引号\"\"\""))
     }
 
+    @Test("tex：ctexart 骨架 + 公式分隔符转回 LaTeX 记法")
+    func texFormat() throws {
+        let tex = try Exporter.content(record: markdownRecord(), format: .tex)
+        #expect(tex.contains(#"\documentclass[UTF8]{ctexart}"#))
+        #expect(tex.contains(#"\usepackage{amsmath,amssymb}"#))
+        #expect(tex.contains(#"\begin{document}"#))
+        #expect(tex.contains("# 标题"))  // 正文原样保留
+        var mathRecord = markdownRecord()
+        mathRecord.pages[0].markdown = "行内 $a+b$ 与独立\n$$c=d$$\n结束"
+        let mathTex = try Exporter.content(record: mathRecord, format: .tex)
+        #expect(mathTex.contains(#"\(a+b\)"#))
+        #expect(mathTex.contains(#"\[c=d\]"#))
+    }
+
     @Test("批量合并导出")
     func batchContent() throws {
         let merged = try Exporter.batchContent(records: [linesRecord(), markdownRecord()], format: .txt)
