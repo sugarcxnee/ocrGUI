@@ -35,18 +35,22 @@ struct SettingsPane: View {
                 launch: EngineLaunch(command: "", cwd: nil, environment: [:],
                                      healthURL: "http://127.0.0.1:8115/health", readyTimeout: 180,
                                      stopCommand: nil),
-                notes: nil)) { saved in
-                if let saved {
+                notes: nil)) { result in
+                if case .saved(let saved) = result {
                     try? model.engineStore.save(saved)
                 }
             }
         }
-        .sheet(item: $editingConfig) { config in
-            EngineEditView(config: config) { saved in
-                if let saved {
+        .sheet(item: $editingConfig) { selected in
+            // 用 id 从 store 取最新副本：底层列表重绘不会让 sheet 消失
+            EngineEditView(config: model.engineStore.configs.first { $0.id == selected.id } ?? selected) { result in
+                switch result {
+                case .saved(let saved):
                     try? model.engineStore.save(saved)
-                } else {
-                    try? model.engineStore.delete(id: config.id)
+                case .deleted(let id):
+                    try? model.engineStore.delete(id: id)
+                case .canceled:
+                    break
                 }
             }
         }
@@ -150,9 +154,13 @@ private struct EngineRow: View {
                     var copy = config
                     copy.enabled = on
                     try? model.engineStore.save(copy)
+                    // 关闭即停服务（对齐"勾上=可在外部使用"的直觉）
+                    if !on {
+                        Task { await model.stopEngine(copy) }
+                    }
                 }))
                 .labelsHidden()
-                .disabled(config.id == "vision" || config.enabled)
+                .help(config.enabled ? "在主窗口引擎菜单中显示；关闭会同时停止其服务" : "在主窗口引擎菜单中显示")
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(config.name).bold()

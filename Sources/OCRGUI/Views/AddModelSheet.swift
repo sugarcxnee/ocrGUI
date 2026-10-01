@@ -67,8 +67,12 @@ struct AddModelSheet: View {
                     .onChange(of: backend) { _, new in
                         repo = new.sampleRepo
                     }
-                    TextField("HuggingFace 仓库（如 \(backend.sampleRepo)）", text: $repo)
-                    TextField("引擎显示名（留空用模型名）", text: $displayName)
+                    VStack(alignment: .leading, spacing: 2) {
+                        TextField("HuggingFace 仓库", text: $repo)
+                        Text("如 \(backend.sampleRepo)")
+                            .font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    TextField("显示名（留空用模型名）", text: $displayName)
                     TextField("端口", text: $port)
                         .onSubmit { port = String(suggestPort(from: port)) }
                 }
@@ -90,13 +94,13 @@ struct AddModelSheet: View {
                     if backend == .transformersVLM {
                         TextField("兜底提示词（可选，输出退化时重试）", text: $fallbackPrompt)
                     }
-                    Text("提示词决定模型输出风格；识别后的结果随时可导出为 txt / md / json / csv / tex 五种格式")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text("结果可导出 txt / md / json / csv / tex")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
 
                 Section {
-                    Toggle("高级（下载镜像 / 项目目录）", isOn: $advancedVisible)
+                    Toggle("高级选项", isOn: $advancedVisible)
                     if advancedVisible {
                         TextField("pip 镜像（空=直连）", text: $pipMirror)
                         TextField("HuggingFace 镜像（空=直连）", text: $hfMirror)
@@ -126,6 +130,8 @@ struct AddModelSheet: View {
                 }
             }
             .padding()
+            .frame(maxWidth: 540)
+            .environment(\.defaultMinListRowHeight, 10)
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

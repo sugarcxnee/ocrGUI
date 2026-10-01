@@ -10,7 +10,13 @@ struct EngineEditView: View {
     @State private var envText: String
     @State private var validationError: String?
 
-    init(config: EngineConfig, onDone: @escaping (EngineConfig?) -> Void) {
+    enum EditResult {
+        case saved(EngineConfig)
+        case deleted(String)
+        case canceled
+    }
+
+    init(config: EngineConfig, onDone: @escaping (EditResult) -> Void) {
         _config = State(initialValue: config)
         _envText = State(initialValue: config.launch?.environment
             .map { "\($0.key)=\($0.value)" }
@@ -19,7 +25,7 @@ struct EngineEditView: View {
         self.onDone = onDone
     }
 
-    let onDone: (EngineConfig?) -> Void
+    let onDone: (EditResult) -> Void
 
     var body: some View {
         ScrollView {
@@ -89,7 +95,7 @@ struct EngineEditView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("取消") {
-                    onDone(nil)
+                    onDone(.canceled)
                     dismiss()
                 }
             }
@@ -126,6 +132,12 @@ struct EngineEditView: View {
         }
     }
 
+    /// 删除当前编辑的引擎（列表行调用的"删除"按钮已经直接删除，此处用于表单内）
+    private func deleteAndClose() {
+        onDone(.deleted(config.id))
+        dismiss()
+    }
+
     private func save() {
         if var launch = config.launch {
             var env: [String: String] = [:]
@@ -146,7 +158,7 @@ struct EngineEditView: View {
         do {
             try config.validate()
             try model.engineStore.save(config)
-            onDone(config)
+            onDone(.saved(config))
             dismiss()
         } catch {
             validationError = "校验失败：\(error.localizedDescription)"
