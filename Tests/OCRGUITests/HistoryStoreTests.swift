@@ -86,5 +86,6 @@ func recordsSortedDescByCreatedAt() throws {
     let newer = makeRecord("new.png", createdAt: Date())
     try store.add(older)
     try store.add(newer)
-    #expect(store.records.map(\.fileName) == ["new.png", "old.png"])
+    #expect(store.records.map(\.fileName) == ["new.png", "old.png"],
+              "实际顺序: \(store.records.map(\.fileName))")
 }

@@ -14,6 +14,7 @@ struct RecordDetailView: View {
     @State private var zoom: CGFloat = 1
     @State private var actualPixels = false
     @State private var pageInput = ""
+    @State private var scrollToPageMarker: String?
     @State private var renderFailed = false
     @State private var pageLineCount: Int = 0
     @State private var pageMarkdown = false
@@ -26,7 +27,7 @@ struct RecordDetailView: View {
                 .frame(minWidth: 300, idealWidth: 440, maxWidth: .infinity)
         }
         .onAppear {
-            editedText = record.displayText
+            editedText = record.markedTextForEditing
             selectedPageNumber = record.pages.first?.pageNumber ?? 1
             pageInput = String(selectedPageNumber)
             pageLineCount = record.pages.reduce(0) { $0 + $1.lines.count }
@@ -34,6 +35,7 @@ struct RecordDetailView: View {
         }
         .onChange(of: selectedPageNumber) { _, newValue in
             pageInput = String(newValue)
+            scrollToPageMarker = HistoryRecord.pageSeparator(for: newValue)
         }
         .onDisappear {
             persistEdit()
@@ -242,7 +244,7 @@ struct RecordDetailView: View {
                 Spacer()
                 exportMenu
                 Button("保存修改") { persistEdit() }
-                    .disabled(editedText == record.displayText)
+                    .disabled(editedText == record.markedTextForEditing)
                 Button {
                     model.copyText(editedText)
                 } label: {
@@ -253,7 +255,7 @@ struct RecordDetailView: View {
 
             Divider()
 
-            FastTextView(text: $editedText)
+            FastTextView(text: $editedText, scrollToPage: scrollToPageMarker)
         }
     }
 
@@ -304,7 +306,7 @@ struct RecordDetailView: View {
     }
 
     private func persistEdit() {
-        guard editedText != record.displayText else { return }
+        guard editedText != record.markedTextForEditing else { return }
         model.saveEdit(record, newText: editedText)
     }
 }
@@ -314,6 +316,8 @@ struct RecordDetailView: View {
 /// SwiftUI TextEditor 处理几十万字符会明显卡顿；NSTextView + TextStorage 可平滑处理。
 struct FastTextView: NSViewRepresentable {
     @Binding var text: String
+    /// 需要滚动定位到的页界行（如 "───── 第 3 页 ─────"）
+    var scrollToPage: String?
 
     func makeNSView(context: Context) -> NSScrollView {
         let textView = NSTextView()
@@ -328,6 +332,7 @@ struct FastTextView: NSViewRepresentable {
         textView.allowsUndo = true
         textView.string = text
         textView.delegate = context.coordinator
+        context.coordinator.textViewRef = textView
         textView.autoresizingMask = [.width]
 
         let scrollView = NSScrollView()
@@ -344,6 +349,16 @@ struct FastTextView: NSViewRepresentable {
         if textView.string != text {
             textView.string = text
         }
+        // 滚动定位到页界行（仅标记变化时，输入不触发跳转）
+        if let marker = scrollToPage,
+           marker != context.coordinator.lastScrolledMarker,
+           let range = textView.string.range(of: marker) {
+            let nsRange = NSRange(range, in: textView.string)
+            textView.setSelectedRange(nsRange)
+            textView.scrollRangeToVisible(nsRange)
+            context.coordinator.lastScrolledMarker = marker
+            context.coordinator.highlightReset(at: nsRange)
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -352,9 +367,25 @@ struct FastTextView: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         private var text: Binding<String>
+        private var resetTask: Task<Void, Never>?
         init(text: Binding<String>) {
             self.text = text
         }
+
+        /// 高亮 300ms 后取消选中
+        func highlightReset(at range: NSRange) {
+            resetTask?.cancel()
+            let textViewRef = textViewRef
+            resetTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                if !Task.isCancelled {
+                    textViewRef?.setSelectedRange(NSRange(location: range.location, length: 0))
+                }
+            }
+        }
+
+        weak var textViewRef: NSTextView?
+        var lastScrolledMarker: String?
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
