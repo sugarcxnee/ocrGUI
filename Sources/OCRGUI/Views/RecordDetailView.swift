@@ -154,10 +154,10 @@ struct RecordDetailView: View {
         if let nsImage = imageForPage(selectedPageNumber) {
             GeometryReader { geo in
                 ScrollView([.vertical, .horizontal]) {
+                    // extent（≥可视区）由 PreviewLayout 决定：小图撑满居中，放大后可滚动
                     ImageWithBoxes(nsImage: nsImage, page: currentPage,
-                                   showBoxes: showBoxes, zoom: zoom, container: geo.size,
+                                   showBoxes: showBoxes, zoom: zoom, viewport: geo.size,
                                    actualPixels: actualPixels)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 }
             }
             .gesture(
@@ -179,7 +179,7 @@ struct RecordDetailView: View {
                 if let path = record.thumbnailPath {
                     ImageWithBoxes(nsImage: NSImage(contentsOfFile: path),
                                    page: currentPage, showBoxes: false, zoom: zoom,
-                                   container: CGSize(width: 300, height: 300))
+                                   viewport: CGSize(width: 300, height: 300))
                         .frame(minHeight: 240)
                 }
             }
@@ -357,73 +357,5 @@ struct FastTextView: NSViewRepresentable {
             guard let textView = notification.object as? NSTextView else { return }
             text.wrappedValue = textView.string
         }
-    }
-}
-
-// MARK: - 图片 + 坐标框 overlay
-
-/// 等比显示原图；showBoxes 时把页面坐标框（像素、左上原点）映射到显示区域
-struct ImageWithBoxes: View {
-    let nsImage: NSImage?
-    let page: OcrPage?
-    let showBoxes: Bool
-    var zoom: CGFloat = 1
-    var container: CGSize = CGSize(width: 800, height: 600)
-    /// 1 渲染像素 = 1 屏幕像素（忽略 zoom 倍率）
-    var actualPixels: Bool = false
-
-    var body: some View {
-        GeometryReader { geo in
-            if let nsImage, nsImage.size.width > 0, nsImage.size.height > 0 {
-                // 以传入容器（或几何区域）的等比适配尺寸为 100%，再乘缩放系数
-                let base = min(container.width / nsImage.size.width,
-                               container.height / nsImage.size.height,
-                               geo.size.width / nsImage.size.width,
-                               geo.size.height / nsImage.size.height)
-                let scale = actualPixels ? 1.0 : base * zoom
-                let drawn = CGSize(width: nsImage.size.width * scale,
-                                   height: nsImage.size.height * scale)
-                let offset = CGPoint(x: max(0, (geo.size.width - drawn.width) / 2),
-                                     y: max(0, (geo.size.height - drawn.height) / 2))
-                ZStack(alignment: .topLeading) {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .frame(width: drawn.width, height: drawn.height)
-                    if showBoxes, let page, page.width > 0, page.height > 0 {
-                        ForEach(Array(page.lines.enumerated()), id: \.offset) { _, line in
-                            let normalized = normalizedRect(of: line, in: page)
-                            Rectangle()
-                                .stroke(Color.orange, lineWidth: 1.5)
-                                .background(Color.orange.opacity(0.08))
-                                .frame(width: normalized.width * drawn.width,
-                                       height: normalized.height * drawn.height)
-                                .offset(x: offset.x + normalized.minX * drawn.width,
-                                        y: offset.y + normalized.minY * drawn.height)
-                        }
-                    }
-                }
-                .frame(width: geo.size.width, height: geo.size.height)
-            } else {
-                VStack {
-                    Image(systemName: "photo").font(.title)
-                    Text("原文件不可用（剪贴板/已移动的文件仅保留缩略图）")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                .frame(width: geo.size.width, height: geo.size.height)
-            }
-        }
-    }
-
-    /// 四点框（可能旋转）取外接矩形；坐标从左上原点像素归一化到 0-1（翻转 y 轴）
-    private func normalizedRect(of line: OcrLine, in page: OcrPage) -> CGRect {
-        let xs = line.box.map { $0.count > 0 ? $0[0] : 0 }
-        let ys = line.box.map { $0.count > 1 ? $0[1] : 0 }
-        guard let minX = xs.min(), let maxX = xs.max(),
-              let minY = ys.min(), let maxY = ys.max() else { return .zero }
-        let x = minX / Double(page.width)
-        let y = minY / Double(page.height)
-        let w = max(0.002, (maxX - minX) / Double(page.width))
-        let h = max(0.002, (maxY - minY) / Double(page.height))
-        return CGRect(x: x, y: y, width: w, height: h)
     }
 }
